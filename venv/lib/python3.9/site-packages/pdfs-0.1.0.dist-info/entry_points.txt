@@ -1,0 +1,3 @@
+[console_scripts]
+pdfs = pdfs.Main:main
+

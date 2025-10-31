@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lead Management – Groups, Mapping, Statements, Invites</title>
+  <style>
+    :root { --bg:#0e1116; --card:#151a22; --ink:#e6e7ea; --muted:#9aa3af; --accent:#5b8def; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --line:#1f2632; --header-h:64px; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial,'Noto Sans','Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol';background:linear-gradient(180deg,#0e1116 0%,#0b0e13 100%);color:var(--ink)}
+    header{padding:16px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(14,17,22,.9);backdrop-filter:saturate(120%) blur(6px);z-index:50;display:flex;gap:12px;align-items:center;min-height:var(--header-h)}
+    header h1{margin:0;font-size:18px;letter-spacing:.3px;font-weight:600}
+    main{display:grid;grid-template-columns:280px 1fr;gap:16px;max-width:1400px;margin:16px auto 80px;padding:0 16px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .row>*{flex:1;min-width:220px}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type=file],select,button,input[type=text],input[type=date],input[type=tel],input[type=email],textarea{width:100%;padding:10px 12px;border:1px solid #2a3445;background:#0f141c;color:var(--ink);border-radius:10px}
+    select,button{cursor:pointer}
+    textarea{min-height:100px;resize:vertical}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid #283246;background:#0f141c;color:var(--ink);cursor:pointer;text-decoration:none;white-space:nowrap}
+    .btn.primary{background:linear-gradient(180deg,#355fbf,#274aaa);border-color:#274aaa}
+    .btn.ghost{background:transparent}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;border:1px solid #283246;color:#cbd5e1}
+    .pill.ok{border-color:#194e2b;color:#b7f7c8;background:rgba(34,197,94,.1)}
+    .pill.warn{border-color:#4a3412;color:#ffe0a3;background:rgba(245,158,11,.08)}
+    .pill.bad{border-color:#51232a;color:#ffd3d6;background:rgba(239,68,68,.08)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 12px;border-bottom:1px solid #20293a;text-align:left;font-size:13px;vertical-align:top}
+    th{position:sticky;top:calc(var(--header-h) + 8px);background:#101522;z-index:10}
+    tbody tr:hover{background:#111723}
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .left-col .group{padding:10px;border-radius:12px;border:1px solid #20293a;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .left-col .group.active{border-color:#355fbf;background:rgba(53,95,191,.1)}
+    .left-col h3{margin:0 0 10px;font-size:14px;color:#cfe0ff}
+    .tag{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid #283246;color:#aab4c4}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    details summary{cursor:pointer;color:#bdd2ff}
+    .nowrap{white-space:nowrap}
+    .file-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+    .file-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;border:1px solid #283246;border-radius:999px;padding:4px 8px}
+    .file-chip button{border:0;background:#1a212e;color:#e5e7eb;border-radius:6px;padding:2px 6px;cursor:pointer}
+    .file-chip button:hover{background:#222b3a}
+
+    /* 3-dots (kebab) menus */
+    .kebab{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #283246;border-radius:8px;background:#0f141c;color:#cbd5e1}
+    .kebab:hover{border-color:#355fbf}
+    .menu{position:absolute;right:0;top:34px;min-width:180px;background:#0f141c;border:1px solid #283246;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:6px;display:none;z-index:20}
+    .menu.open{display:block}
+    .menu button{width:100%;text-align:left;background:transparent;border:0;color:#e6e7ea;padding:8px 10px;border-radius:8px}
+    .menu button:hover{background:#151b25}
+
+    /* Checkboxes */
+    .chk{width:16px;height:16px}
+
+    /* Modal dialog */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);display:none;z-index:90}
+    .modal{position:fixed;inset:auto auto 8% 50%;transform:translateX(-50%);width:min(920px,95vw);background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 30px 80px rgba(0,0,0,.45);display:none;z-index:100}
+    .modal header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
+    .modal header h4{margin:0;font-size:16px}
+    .modal .content{padding:16px;max-height:65vh;overflow:auto}
+    .modal .actions{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+    .modal .grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .subtle{font-size:12px;color:#94a3b8}
+    .hr{height:1px;background:#20293a;margin:12px 0}
+    .inline-list{display:flex;flex-wrap:wrap;gap:6px}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Lead Management</h1>
+    <span class="tag">Groups</span>
+    <span class="tag">CSV/Excel mapping</span>
+    <span class="tag">Per-lead statements</span>
+    <span class="tag">Send application link</span>
+  </header>
+
+  <main>
+    <!-- LEFT: Groups -->
+    <aside class="left-col card" id="groupsCard">
+      <h3>Groups</h3>
+      <div class="row">
+        <div>
+          <label for="newGroupName">Create new group</label>
+          <input id="newGroupName" type="text" placeholder="e.g. NYC Restaurants - Oct" />
+        </div>
+        <div style="flex:0 0 160px;align-self:flex-end">
+          <button class="btn primary" id="createGroupBtn">Create</button>
+        </div>
+      </div>
+      <div class="small muted" style="margin:8px 0 12px">Click a group to view and add leads. You can import more files into an existing group any time.</div>
+      <div id="groupsList"></div>
+    </aside>
+
+    <!-- RIGHT: Workspace -->
+    <section class="card" id="workspace">
+      <!-- Upload and Mapping -->
+      <section class="card" id="uploadCard">
+        <div class="row">
+          <div>
+            <label for="fileInput">Upload CSV or Excel (.csv, .xlsx, .xls)</label>
+            <input id="fileInput" type="file" accept=".csv,.xlsx,.xls" />
+            <div class="small muted" style="margin-top:6px">We will read the first worksheet for Excel files.</div>
+          </div>
+          <div>
+            <label for="targetGroup">Target group</label>
+            <select id="targetGroup"></select>
+            <div class="small muted">Choose an existing group or create one on the left.</div>
+          </div>
+          <div style="flex:0 0 200px; align-self:flex-end; display:flex; gap:8px; justify-content:flex-end;">
+            <!-- Bulk actions menu -->
+            <div class="kebab" id="bulkKebab" title="Bulk actions">
+              ⋯
+              <div class="menu" id="bulkMenu">
+                <button id="bulkDeleteBtn">Delete selected leads</button>
+              </div>
+            </div>
+            <button class="btn primary" id="parseBtn" disabled>Parse file</button>
+          </div>
+        </div>
+        <div class="row small muted" style="margin-top:8px">
+          <div class="pill">Rows: <span id="rowCount">0</span></div>
+          <div class="pill">Columns: <span id="colCount">0</span></div>
+          <div class="pill warn">Header required</div>
+        </div>
+      </section>
+
+      <section class="card" id="mappingCard" style="display:none;">
+        <div class="row" style="align-items:flex-start;">
+          <div style="flex:2;">
+            <h3 style="margin:4px 0 12px; font-size:16px;">Map required fields <span class="small muted">First, Last, Business, Phone, Email</span></h3>
+            <div class="grid" id="mappingGrid"></div>
+          </div>
+          <div style="flex:1;">
+            <h3 style="margin:4px 0 12px; font-size:16px;">Status</h3>
+            <div class="row">
+              <div class="pill ok">Required mapped: <span id="reqMapped">0</span>/5</div>
+              <div class="pill warn">Missing or invalid cells: <span id="missingCells">0</span></div>
+            </div>
+            <div class="spacer"></div>
+            <details>
+              <summary>Optional fields</summary>
+              <div class="grid" id="optionalGrid" style="margin-top:10px;"></div>
+            </details>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="resetBtn">Reset</button>
+          <button class="btn" id="previewBtn" disabled>Preview</button>
+          <button class="btn" id="uploadBtn" disabled>Upload list</button>
+          <button class="btn primary" id="importToGroupBtn" disabled>Import to group</button>
+        </div>
+      </section>
+
+      <section class="card" id="previewCard" style="display:none;">
+        <h3 style="margin:4px 0 12px; font-size:16px;">Preview first 10 rows</h3>
+        <div style="overflow:auto;">
+          <table id="previewTable"></table>
+        </div>
+      </section>
+
+      <!-- Group Leads -->
+      <section class="card" id="groupLeadsCard" style="display:none;">
+        <div class="row" style="align-items:center;">
+          <h3 style="margin:0;flex:1">Leads in group: <span id="activeGroupName" class="muted"></span></h3>
+          <div class="row" style="flex:1">
+            <div>
+              <label>Filter by search</label>
+              <input id="leadSearch" type="text" placeholder="Search name, email, phone" />
+            </div>
+            <div style="flex:0 0 200px;align-self:flex-end">
+              <button class="btn" id="exportGroupBtn">Export group CSV</button>
+            </div>
+          </div>
+        </div>
+        <div style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="selectAll" class="chk" /></th>
+                <th>Name</th>
+                <th>Business</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Optional</th>
+                <th>Statements</th>
+                <th>Invite</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="leadsTbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card small" id="helpCard">
+        <details>
+          <summary>How this page works</summary>
+          <ul>
+            <li>Create a group, or pick an existing group.</li>
+            <li>Upload CSV/Excel, map columns, then Import to group. Repeat to add more leads to the same group.</li>
+            <li>Upload bank statements per lead (PDF/images). Multiple files supported.</li>
+            <li><strong>Group ⋯</strong>: Rename / Duplicate / Delete the group.</li>
+            <li><strong>Toolbar ⋯</strong>: Delete selected leads (use the checkboxes).</li>
+            <li>Send application link by email or SMS (placeholder; wire later).</li>
+            <li>Once you receive applications/statements you can push to Supabase (out of scope here).</li>
+          </ul>
+        </details>
+      </section>
+    </section>
+  </main>
+
+  <!-- Lead dialog -->
+  <div class="modal-overlay" id="dlgOverlay"></div>
+  <div class="modal" id="leadDialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <header>
+      <h4 id="dlgTitle">Lead details</h4>
+      <div class="inline-list">
+        <button class="btn ghost" id="dlgCloseBtn">Close</button>
+      </div>
+    </header>
+    <div class="content">
+      <div class="grid" id="leadFormFields"></div>
+      <div class="hr"></div>
+      <div class="grid">
+        <div>
+          <label for="dlgStmtInput">Bank statements (PDF / images)</label>
+          <input id="dlgStmtInput" type="file" accept="application/pdf,image/*" multiple />
+          <div class="subtle" style="margin-top:6px">Attached:</div>
+          <div class="file-list" id="dlgStmtList"></div>
+          <div class="inline-list" style="margin-top:8px">
+            <button class="btn" id="dlgStmtClear">Clear all</button>
+          </div>
+        </div>
+        <div>
+          <label for="dlgNotes">Notes</label>
+          <textarea id="dlgNotes" placeholder="Call summary, doc issues, underwriting notes..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="dlgCancel">Cancel</button>
+      <button class="btn primary" id="dlgSave">Save</button>
+    </div>
+  </div>
+
+  <script>
+    // ---------- Field configuration ----------
+    const REQUIRED = [
+      {key:'first_name', label:'First Name'},
+      {key:'last_name', label:'Last Name'},
+      {key:'business_name', label:'Business Name'},
+      {key:'phone', label:'Phone Number'},
+      {key:'email', label:'Email'}
+    ];
+    const OPTIONAL = [
+      {key:'ssn', label:'SSN'},
+      {key:'ein', label:'EIN'},
+      {key:'address', label:'Address'},
+      {key:'state', label:'State'},
+      {key:'zip', label:'Zip'},
+      {key:'dob', label:'DOB'},
+      {key:'business_start_date', label:'Business Start Date'}
+    ];
+
+    // ---------- DOM refs ----------
+    const fileInput = document.getElementById('fileInput');
+    const parseBtn  = document.getElementById('parseBtn');
+    const rowCountEl = document.getElementById('rowCount');
+    const colCountEl = document.getElementById('colCount');
+    const mappingCard = document.getElementById('mappingCard');
+    const mappingGrid = document.getElementById('mappingGrid');
+    const optionalGrid = document.getElementById('optionalGrid');
+    const reqMappedEl = document.getElementById('reqMapped');
+    const missingCellsEl = document.getElementById('missingCells');
+    const previewBtn = document.getElementById('previewBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const importToGroupBtn = document.getElementById('importToGroupBtn');
+    const previewCard = document.getElementById('previewCard');
+    const previewTable = document.getElementById('previewTable');
+    const resetBtn = document.getElementById('resetBtn');
+    const targetGroupSelect = document.getElementById('targetGroup');
+    const groupsList = document.getElementById('groupsList');
+    const newGroupName = document.getElementById('newGroupName');
+    const createGroupBtn = document.getElementById('createGroupBtn');
+    const groupLeadsCard = document.getElementById('groupLeadsCard');
+    const activeGroupName = document.getElementById('activeGroupName');
+    const leadsTbody = document.getElementById('leadsTbody');
+    const leadSearch = document.getElementById('leadSearch');
+    const exportGroupBtn = document.getElementById('exportGroupBtn');
+    const selectAll = document.getElementById('selectAll');
+    const bulkKebab = document.getElementById('bulkKebab');
+    const bulkMenu = document.getElementById('bulkMenu');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+
+    // Dialog refs
+    const dlgOverlay = document.getElementById('dlgOverlay');
+    const leadDialog = document.getElementById('leadDialog');
+    const dlgTitle = document.getElementById('dlgTitle');
+    const leadFormFields = document.getElementById('leadFormFields');
+    const dlgStmtInput = document.getElementById('dlgStmtInput');
+    const dlgStmtList = document.getElementById('dlgStmtList');
+    const dlgStmtClear = document.getElementById('dlgStmtClear');
+    const dlgNotes = document.getElementById('dlgNotes');
+    const dlgCloseBtn = document.getElementById('dlgCloseBtn');
+    const dlgCancel = document.getElementById('dlgCancel');
+    const dlgSave = document.getElementById('dlgSave');
+
+    let rawRows = [];
+    let headers = [];
+    let mapping = {};
+
+    // ---------- Local storage model ----------
+    // groups = [{id, name, createdAt}]
+    // leads = { [groupId]: [{id, ...fields, notes:'', files:[{name,size,type,url}], status:{inviteSent:false, appReceived:false, stmtsReceived:false}}] }
+
+    const LS_KEYS = { groups:'lm_groups', leads:'lm_leads' };
+
+    function loadGroups(){ return JSON.parse(localStorage.getItem(LS_KEYS.groups)||'[]'); }
+    function saveGroups(arr){ localStorage.setItem(LS_KEYS.groups, JSON.stringify(arr)); }
+    function loadLeads(){ return JSON.parse(localStorage.getItem(LS_KEYS.leads)||'{}'); }
+    function saveLeads(obj){ localStorage.setItem(LS_KEYS.leads, JSON.stringify(obj)); }
+
+    let groups = loadGroups();
+    let leadsByGroup = loadLeads();
+    let activeGroupId = groups[0]?.id || null;
+
+    // ---------- Init UI ----------
+    refreshGroupsUI();
+    refreshTargetGroupOptions();
+    if(activeGroupId){ openGroup(activeGroupId); }
+
+    // kebab toggles
+    bulkKebab?.addEventListener('click', (e)=>{ e.stopPropagation(); bulkMenu.classList.toggle('open'); });
+    document.addEventListener('click', ()=> bulkMenu.classList.remove('open'));
+
+    bulkDeleteBtn?.addEventListener('click', bulkDeleteSelected);
+
+    fileInput.addEventListener('change', () => { parseBtn.disabled = !fileInput.files?.length; });
+    parseBtn.addEventListener('click', handleParse);
+    previewBtn.addEventListener('click', () => {
+      const rows = buildNormalizedRows(10);
+      renderPreview(rows);
+      previewCard.style.display='block';
+      window.scrollTo({top:previewCard.offsetTop-60, behavior:'smooth'});
+    });
+    uploadBtn.addEventListener('click', uploadList);
+    importToGroupBtn.addEventListener('click', importMappedIntoGroup);
+    resetBtn.addEventListener('click', resetPage);
+
+    createGroupBtn.addEventListener('click', () => {
+      const name = (newGroupName.value||'').trim();
+      if(!name) return alert('Enter a group name');
+      const id = 'g_'+Math.random().toString(36).slice(2,10);
+      groups.unshift({id,name,createdAt:Date.now()});
+      saveGroups(groups);
+      leadsByGroup[id] = leadsByGroup[id]||[];
+      saveLeads(leadsByGroup);
+      newGroupName.value='';
+      activeGroupId = id;
+      refreshGroupsUI();
+      refreshTargetGroupOptions();
+      openGroup(id);
+    });
+
+    leadSearch?.addEventListener('input', () => renderLeadsTable());
+    exportGroupBtn?.addEventListener('click', exportActiveGroupCSV);
+    selectAll?.addEventListener('change', (e)=>{
+      const checks = document.querySelectorAll('.rowchk');
+      checks.forEach(ch=>{ ch.checked = e.target.checked; });
+    });
+
+    // Dialog wiring
+    dlgCloseBtn?.addEventListener('click', closeLeadDialog);
+    dlgCancel?.addEventListener('click', (e)=>{ e.preventDefault(); closeLeadDialog(); });
+    dlgOverlay?.addEventListener('click', closeLeadDialog);
+    dlgSave?.addEventListener('click', (e)=>{ e.preventDefault(); saveLeadDialog(); });
+    dlgStmtInput?.addEventListener('change', onDialogFilesAdded);
+    dlgStmtClear?.addEventListener('click', (e)=>{ e.preventDefault(); clearDialogFiles(); });
+
+    function refreshTargetGroupOptions(){
+      targetGroupSelect.innerHTML = '';
+      if(groups.length===0){
+        const opt = new Option('No groups yet. Create one on the left','');
+        targetGroupSelect.appendChild(opt);
+      } else {
+        groups.forEach(g => targetGroupSelect.appendChild(new Option(g.name, g.id)));
+        if(activeGroupId) targetGroupSelect.value = activeGroupId;
+      }
+    }
+
+    function refreshGroupsUI(){
+      groupsList.innerHTML = '';
+      if(groups.length===0){
+        const empty = document.createElement('div');
+        empty.className = 'small muted';
+        empty.textContent = 'No groups yet. Create one using the form above.';
+        groupsList.appendChild(empty);
+        return;
+      }
+      groups.forEach(g => {
+        const row = document.createElement('div');
+        row.className = 'group'+(g.id===activeGroupId? ' active':'' );
+        row.style.cursor='pointer';
+
+        const left = document.createElement('div');
+        left.innerHTML = `<div style="font-size:14px">${g.name}</div><div class="small muted">${new Date(g.createdAt).toLocaleString()}</div>`;
+
+        const right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.alignItems = 'center';
+        right.style.gap = '8px';
+        const cnt = (leadsByGroup[g.id]||[]).length;
+        const tag = document.createElement('span'); tag.className='tag'; tag.textContent = `${cnt} leads`;
+
+        // kebab menu per group
+        const keb = document.createElement('div'); keb.className='kebab'; keb.title='Group actions'; keb.innerHTML='⋯';
+        const menu = document.createElement('div'); menu.className='menu';
+        const bRename = document.createElement('button'); bRename.textContent='Rename'; bRename.onclick = (ev)=>{ev.stopPropagation(); menu.classList.remove('open'); renameGroup(g.id)};
+        const bDup = document.createElement('button'); bDup.textContent='Duplicate'; bDup.onclick = (ev)=>{ev.stopPropagation(); menu.classList.remove('open'); duplicateGroup(g.id)};
+        const bDel = document.createElement('button'); bDel.textContent='Delete'; bDel.onclick = (ev)=>{ev.stopPropagation(); menu.classList.remove('open'); deleteGroup(g.id)};
+        menu.append(bRename,bDup,bDel); keb.appendChild(menu);
+        keb.addEventListener('click',(ev)=>{ev.stopPropagation(); closeAllMenus(); menu.classList.toggle('open');});
+
+        right.append(tag, keb);
+        row.append(left, right);
+
+        row.addEventListener('click', () => { activeGroupId=g.id; refreshGroupsUI(); refreshTargetGroupOptions(); openGroup(g.id); });
+        groupsList.appendChild(row);
+      });
+      document.addEventListener('click', closeAllMenus);
+    }
+
+    function closeAllMenus(){ document.querySelectorAll('.menu').forEach(m=>m.classList.remove('open')); }
+
+    function renameGroup(groupId){
+      const g = groups.find(x => x.id === groupId);
+      if(!g) return;
+      const name = prompt('Rename group', g.name);
+      if(name == null) return;
+      const trimmed = name.trim();
+      if(!trimmed) { alert('Group name cannot be empty.'); return; }
+      if(groups.some(x => x.id !== g.id && x.name.toLowerCase() === trimmed.toLowerCase())){
+        alert('A group with that name already exists.'); return;
+      }
+      g.name = trimmed;
+      saveGroups(groups);
+      refreshGroupsUI();
+      refreshTargetGroupOptions();
+      if(activeGroupId === g.id) openGroup(g.id);
+    }
+
+    function duplicateGroup(groupId){
+      const g = groups.find(x=>x.id===groupId); if(!g) return;
+      const newId = 'g_'+Math.random().toString(36).slice(2,10);
+      const newName = prompt('Name for duplicated group', `Copy of ${g.name}`) || `Copy of ${g.name}`;
+      groups.unshift({id:newId, name:newName.trim(), createdAt:Date.now()});
+      saveGroups(groups);
+      // deep-copy leads
+      const src = (leadsByGroup[groupId]||[]);
+      const dst = src.map(r=>({
+        ...JSON.parse(JSON.stringify(r)),
+        id: 'l_'+Math.random().toString(36).slice(2,10),
+        files: (r.files||[]).map(f=>({...f}))
+      }));
+      leadsByGroup[newId] = dst; saveLeads(leadsByGroup);
+      refreshGroupsUI(); refreshTargetGroupOptions(); openGroup(newId);
+    }
+
+    function deleteGroup(groupId){
+      const g = groups.find(x => x.id === groupId);
+      if(!g) return;
+      if(!confirm(`Delete group "${g.name}" and all its leads? This cannot be undone.`)) return;
+
+      groups = groups.filter(x => x.id !== groupId);
+      saveGroups(groups);
+
+      if(leadsByGroup[groupId]) {
+        delete leadsByGroup[groupId];
+        saveLeads(leadsByGroup);
+      }
+
+      if(activeGroupId === groupId){
+        activeGroupId = groups[0]?.id || null;
+        if(activeGroupId){
+          openGroup(activeGroupId);
+        } else {
+          if(leadsTbody) leadsTbody.innerHTML = '';
+          if(activeGroupName) activeGroupName.textContent = '';
+          if(groupLeadsCard) groupLeadsCard.style.display = 'none';
+        }
+      }
+
+      refreshGroupsUI();
+      refreshTargetGroupOptions();
+    }
+
+    function openGroup(id){
+      activeGroupId = id;
+      activeGroupName.textContent = groups.find(x=>x.id===id)?.name || '';
+      groupLeadsCard.style.display = 'block';
+      renderLeadsTable();
+    }
+
+    function renderLeadsTable(){
+      const list = (leadsByGroup[activeGroupId]||[]).filter(filterLeadBySearch);
+      leadsTbody.innerHTML = '';
+      if(list.length===0){
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 9; td.className='small muted'; td.textContent = 'No leads in this group yet. Import mapped data to populate.';
+        tr.appendChild(td); leadsTbody.appendChild(tr); return;
+      }
+      list.forEach((lead) => {
+        const tr = document.createElement('tr');
+        tr.style.cursor='pointer';
+        tr.title='Click to view / edit';
+        tr.addEventListener('click', (e)=>{
+          const t=e.target.tagName;
+          if(t==='INPUT'||t==='BUTTON'||t==='SELECT'||t==='LABEL'||t==='A'|| e.target.closest('.file-chip')) return;
+          openLeadDialog(lead);
+        });
+
+        const name = `${lead.first_name||''} ${lead.last_name||''}`.trim();
+
+        // select checkbox
+        const td0 = document.createElement('td');
+        const chk = document.createElement('input'); chk.type='checkbox'; chk.className='chk rowchk'; chk.dataset.id = lead.id; td0.appendChild(chk);
+
+        const td1 = document.createElement('td');
+        td1.innerHTML = `<div class="nowrap">${name||'-'}</div><div class="small muted">DOB: ${lead.dob||'-'}</div>`;
+        const td2 = document.createElement('td');
+        td2.innerHTML = `<div>${lead.business_name||'-'}</div><div class="small muted">Start: ${lead.business_start_date||'-'}</div>`;
+        const td3 = document.createElement('td');
+        td3.textContent = lead.email || '-';
+        const td4 = document.createElement('td');
+        td4.textContent = formatPhone(lead.phone)||'-';
+        const td5 = document.createElement('td');
+        td5.innerHTML = `<div class="small">SSN: ${mask(lead.ssn)}</div><div class="small">EIN: ${lead.ein||'-'}</div><div class="small">${lead.address||''} ${lead.state||''} ${lead.zip||''}</div>`;
+
+        const td6 = document.createElement('td');
+        const fileId = `stmt_${lead.id}`;
+        td6.innerHTML = `<input id="${fileId}" type="file" accept="application/pdf,image/*" multiple />`;
+        const fileActions = document.createElement('div');
+        fileActions.className='small';
+        const clearBtn = document.createElement('button');
+        clearBtn.className='btn ghost';
+        clearBtn.textContent='Clear all';
+        clearBtn.style.marginTop = '6px';
+        clearBtn.onclick = (ev)=> { ev.stopPropagation(); if(confirm('Remove all attached documents for this lead?')){ (lead.files||[]).forEach(f=>{try{ if(f.url) URL.revokeObjectURL(f.url);}catch(e){} }); lead.files = []; persistLead(lead); renderLeadsTable(); } };
+        fileActions.appendChild(clearBtn);
+        td6.appendChild(fileActions);
+        const fileList = document.createElement('div');
+        fileList.className='file-list';
+        td6.appendChild(fileList);
+        const files = lead.files||[]; files.forEach((f, idx) => fileList.appendChild(makeFileChip(f, lead, idx)));
+        td6.querySelector('#'+fileId).addEventListener('change', (e)=>{
+          e.stopPropagation();
+          const chosen = Array.from(e.target.files||[]).map(f=>({name:f.name,size:f.size,type:f.type,url:URL.createObjectURL(f)}));
+          lead.files = [...(lead.files||[]), ...chosen];
+          persistLead(lead);
+          renderLeadsTable();
+        });
+
+        const td7 = document.createElement('td');
+        const emailCk = document.createElement('input'); emailCk.type='checkbox'; emailCk.checked=!!lead.email; emailCk.title='Send via email';
+        const smsCk = document.createElement('input'); smsCk.type='checkbox'; smsCk.checked=!!lead.phone; smsCk.title='Send via SMS';
+        const sendBtn = document.createElement('button'); sendBtn.className='btn'; sendBtn.textContent='Send link';
+        sendBtn.onclick = (ev)=>{ ev.stopPropagation(); sendApplicationLink(lead, {email:emailCk.checked, sms:smsCk.checked}); };
+        td7.append('Email ', emailCk, ' SMS ', smsCk, document.createElement('br'), sendBtn);
+
+        const td8 = document.createElement('td');
+        const st = lead.status||{inviteSent:false, appReceived:false, stmtsReceived:false};
+        td8.appendChild(makeStatusPill(st.inviteSent?'Invite sent':'Invite not sent', st.inviteSent?'ok':'warn'));
+        td8.appendChild(document.createElement('br'));
+        td8.appendChild(makeStatusPill(st.appReceived?'Application received':'Application pending', st.appReceived?'ok':'warn'));
+        td8.appendChild(document.createElement('br'));
+        const gotStmts = (lead.files||[]).length>0 || st.stmtsReceived;
+        td8.appendChild(makeStatusPill(gotStmts?'Statements received':'No statements', gotStmts?'ok':'bad'));
+
+        tr.append(td0,td1,td2,td3,td4,td5,td6,td7,td8);
+        leadsTbody.appendChild(tr);
+      });
+    }
+
+    function filterLeadBySearch(lead){
+      const q = (leadSearch.value||'').toLowerCase();
+      if(!q) return true;
+      return [lead.first_name, lead.last_name, lead.email, lead.phone, lead.business_name].some(v => (v||'').toLowerCase().includes(q));
+    }
+
+    function bulkDeleteSelected(){
+      const checks = Array.from(document.querySelectorAll('.rowchk:checked'));
+      if(checks.length===0){ alert('No leads selected.'); return; }
+      if(!confirm(`Delete ${checks.length} selected lead(s)? This cannot be undone.`)) return;
+      const ids = new Set(checks.map(c=>c.dataset.id));
+      const list = leadsByGroup[activeGroupId]||[];
+      leadsByGroup[activeGroupId] = list.filter(item => !ids.has(item.id));
+      saveLeads(leadsByGroup);
+      renderLeadsTable();
+      selectAll.checked = false;
+      bulkMenu.classList.remove('open');
+    }
+
+    function makeStatusPill(text, type){
+      const span = document.createElement('span');
+      span.className = 'pill '+(type||'');
+      span.textContent = text; return span;
+    }
+
+    function makeFileChip(file, lead, idx){
+      const chip = document.createElement('span');
+      chip.className='file-chip';
+      const name = document.createElement('span');
+      name.textContent = file.name;
+      name.style.cursor='pointer';
+      name.title='Click to preview';
+      name.onclick = (ev) => { ev.stopPropagation(); if(file.url) window.open(file.url, '_blank'); };
+
+      const del = document.createElement('button');
+      del.textContent='✕';
+      del.title='Remove file';
+      del.onclick = (ev)=>{ ev.stopPropagation(); if(confirm(`Remove \"${file.name}\"?`)){ try{ if(file.url) URL.revokeObjectURL(file.url);}catch(e){}; (lead.files||[]).splice(idx,1); persistLead(lead); renderLeadsTable(); if(currentDialogLead){ openLeadDialog(currentDialogLead); } } };
+
+      chip.append(name, del);
+      return chip;
+    }
+
+    function persistLead(lead){
+      if(typeof lead.notes === 'undefined') lead.notes = '';
+      const arr = leadsByGroup[activeGroupId]||[];
+      const idx = arr.findIndex(x=>x.id===lead.id);
+      if(idx>=0) arr[idx]=lead; else arr.push(lead);
+      leadsByGroup[activeGroupId]=arr; saveLeads(leadsByGroup);
+    }
+
+    function sendApplicationLink(lead, channels){
+      if(!channels.email && !channels.sms){ return alert('Select at least one channel to send the link'); }
+      alert(`Invite queued for ${lead.first_name||''} ${lead.last_name||''} via ${channels.email?'email':''} ${channels.sms?'sms':''}`);
+      lead.status = lead.status || {}; lead.status.inviteSent = true; persistLead(lead); renderLeadsTable();
+    }
+
+    function exportActiveGroupCSV(){
+      const arr = leadsByGroup[activeGroupId]||[];
+      const cols = [...REQUIRED, ...OPTIONAL].map(f=>f.key).concat(['notes']);
+      const csv = toCSV(arr, cols);
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='group_leads.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    // ---------- Parsing and mapping ----------
+    async function handleParse(){
+      if(!fileInput.files?.length) return;
+      const file = fileInput.files[0];
+      const ext = file.name.toLowerCase().split('.').pop();
+      rawRows=[]; headers=[]; mapping={}; previewCard.style.display='none';
+
+      if(ext==='csv')      await parseCSV(file);
+      else if(ext==='xlsx' || ext==='xls') await parseXLSX(file);
+      else { alert('Unsupported file type. Upload .csv, .xlsx or .xls'); return; }
+
+      if(!rawRows.length){ alert('No rows detected. Ensure your file has a header row and data.'); return; }
+      headers = Object.keys(rawRows[0]||{}).map(h => (h||'').toString());
+      rowCountEl.textContent = rawRows.length.toString();
+      colCountEl.textContent = headers.length.toString();
+      buildMappingUI();
+      mappingCard.style.display='block';
+      window.scrollTo({top:mappingCard.offsetTop-60, behavior:'smooth'});
+    }
+
+    function buildMappingUI(){
+      mappingGrid.innerHTML=''; optionalGrid.innerHTML='';
+      [...REQUIRED, ...OPTIONAL].forEach(field => {
+        const wrap = document.createElement('div');
+        const lbl = document.createElement('label');
+        lbl.innerHTML = `${field.label} ${REQUIRED.find(r=>r.key===field.key) ? '<span class=\"req\">*</span>' : '<span class=\"opt\">(optional)</span>'}`;
+        const sel = document.createElement('select'); sel.dataset.target = field.key; sel.appendChild(new Option('Select a column',''));
+        headers.forEach(h => sel.appendChild(new Option(h, h)));
+        sel.value = '';
+        sel.addEventListener('change', onMappingChanged);
+        wrap.appendChild(lbl); wrap.appendChild(sel);
+        if(REQUIRED.some(r=>r.key===field.key)) mappingGrid.appendChild(wrap); else optionalGrid.appendChild(wrap);
+        mapping[field.key] = sel.value;
+      });
+      updateStatus();
+    }
+
+    function parseCSV(file){
+      return new Promise(resolve => {
+        Papa.parse(file, { header:true, skipEmptyLines:true, transformHeader:h => (h||'').toString().trim(), complete:(res)=>{ rawRows=res.data; resolve(); } });
+      });
+    }
+
+    async function parseXLSX(file){
+      const data = await file.arrayBuffer(); const wb = XLSX.read(data, {type:'array'}); const ws = wb.Sheets[wb.SheetNames[0]]; rawRows = XLSX.utils.sheet_to_json(ws, {defval:'', raw:false, blankrows:false});
+    }
+
+    function onMappingChanged(e){ mapping[e.target.dataset.target] = e.target.value; updateStatus(); }
+
+    function updateStatus(){
+      let mappedCount=0; REQUIRED.forEach(r => { if(mapping[r.key]) mappedCount++; });
+      reqMappedEl.textContent = `${mappedCount}`;
+      const missing = countMissingRequiredCells(); missingCellsEl.textContent = `${missing}`;
+      const ready = mappedCount === REQUIRED.length && missing === 0;
+      previewBtn.disabled = mappedCount < REQUIRED.length;
+      uploadBtn.disabled = !ready;
+      importToGroupBtn.disabled = !ready || !targetGroupSelect.value;
+    }
+
+    function countMissingRequiredCells(){
+      const reqKeys = REQUIRED.map(r => r.key).filter(k => mapping[k]);
+      let missing=0;
+      for(const row of rawRows){
+        for(const k of reqKeys){
+          const header = mapping[k]; const val = (row[header]??'').toString().trim();
+          if(!val) missing++;
+          if(k==='email' && val){ if(!isValidEmail(val)) missing++; }
+          if(k==='phone' && val){ if(!hasTenDigits(val)) missing++; }
+        }
+      }
+      return missing;
+    }
+
+    function isValidEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+    function hasTenDigits(v){ const d=(v||'').replace(/\D/g,''); return d.length>=10; }
+
+    function buildNormalizedRows(limit=null){
+      const out=[]; const fields=[...REQUIRED,...OPTIONAL]; const dateLike=new Set(['dob','business_start_date']);
+      for(let i=0;i<rawRows.length;i++){ if(limit!==null && i>=limit) break; const src=rawRows[i]; const dest={};
+        for(const f of fields){ const header=mapping[f.key]; let v = header ? (src[header]??'') : ''; if(typeof v!=='string') v = v?.toString?.()??''; v=v.trim(); if(f.key==='phone') v=v.replace(/\D/g,''); if(f.key==='email') v=v.toLowerCase(); if(dateLike.has(f.key)){ if(/^\d{5}$/.test(v)){ const base=new Date(Date.UTC(1899,11,30)); const d=new Date(base.getTime()+parseInt(v,10)*86400000); if(!isNaN(d)) v=d.toISOString().slice(0,10); } } dest[f.key]=v; }
+        out.push(dest);
+      }
+      return out;
+    }
+
+    function renderPreview(rows){
+      const cols=[...REQUIRED,...OPTIONAL].map(f=>({key:f.key,label:f.label}));
+      let html='<thead><tr>'+cols.map(c=>`<th>${c.label}<br/><span class=\"small muted\">${c.key}</span></th>`).join('')+'</tr></thead>';
+      html+='<tbody>'+rows.map(r=>'<tr>'+cols.map(c=>`<td>${(r[c.key]||'')}</td>`).join('')+'</tr>').join('')+'</tbody>';
+      previewTable.innerHTML=html;
+    }
+
+    function importMappedIntoGroup(){
+      const gid = targetGroupSelect.value; if(!gid) return alert('Choose a target group');
+      const rows = buildNormalizedRows();
+      const arr = leadsByGroup[gid]||[];
+      rows.forEach(r => { r.id = r.id || ('l_'+Math.random().toString(36).slice(2,10)); r.files = r.files||[]; r.status = r.status||{inviteSent:false, appReceived:false, stmtsReceived:false}; if(typeof r.notes==='undefined') r.notes=''; arr.push(r); });
+      leadsByGroup[gid]=arr; saveLeads(leadsByGroup);
+      alert(`Imported ${rows.length} leads into group`);
+      if(gid===activeGroupId){ renderLeadsTable(); }
+    }
+
+    function resetPage(){
+      fileInput.value=''; parseBtn.disabled=true; rawRows=[]; headers=[]; mapping={}; rowCountEl.textContent='0'; colCountEl.textContent='0'; mappingCard.style.display='none'; previewCard.style.display='none'; previewTable.innerHTML=''; window.scrollTo({top:0, behavior:'smooth'});
+    }
+
+    function toCSV(rows, columns){
+      const escape = (v) => { if(v==null) return ''; let s=v.toString(); if(/[",\n]/.test(s)) s='"'+s.replace(/"/g,'""')+'"'; return s; };
+      const header = columns.join(','); const lines = rows.map(r => columns.map(c => escape(r[c])).join(',')); return [header,...lines].join('\n');
+    }
+
+    function mask(v){ if(!v) return '-'; const s=v.toString().replace(/\D/g,''); if(!s) return '-'; return s.replace(/.(?=.{4})/g,'*'); }
+    function formatPhone(v){ const d=(v||'').replace(/\D/g,''); if(d.length===10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`; return v; }
+
+    function uploadList(){
+      const rows = buildNormalizedRows();
+      const invalid = [];
+      rows.forEach((r, i) => {
+        for (const req of REQUIRED) {
+          const v = (r[req.key]||'').toString().trim();
+          if (!v) invalid.push(i);
+          if (req.key === 'email' && v && !isValidEmail(v)) invalid.push(i);
+          if (req.key === 'phone' && v && !hasTenDigits(v)) invalid.push(i);
+        }
+      });
+      if (invalid.length) { alert('Some required fields are empty or invalid. Please fix mapping/data.'); return; }
+
+      const payload = { columns: [...REQUIRED, ...OPTIONAL].map(f=>f.key).concat(['notes']), mapping, rows };
+      window.dispatchEvent(new CustomEvent('leads:ready', { detail: payload }));
+      const endpoint = window.LEADS_UPLOAD_ENDPOINT || null;
+      if (endpoint && window.fetch) {
+        fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+          .then(r => r.ok ? r.json() : Promise.reject(new Error('Upload failed')))
+          .then(() => alert('Leads uploaded successfully.'))
+          .catch(err => { console.error(err); alert('Upload error. Check console.'); });
+      } else {
+        alert('Mapped list is ready. To auto-upload, set window.LEADS_UPLOAD_ENDPOINT to your API URL or listen for the "leads:ready" event.');
+      }
+    }
+
+    // ---------- Lead dialog helpers ----------
+    const FIELD_META = [
+      ...REQUIRED,
+      ...OPTIONAL,
+      {key:'notes', label:'Notes'}
+    ];
+    let currentDialogLead = null;
+
+    function inputFor(key, value){
+      let type = 'text';
+      if(key==='email') type='email';
+      if(key==='phone') type='tel';
+      if(key==='dob' || key==='business_start_date') type='date';
+      if(key==='notes') {
+        const wrap=document.createElement('div');
+        const label=document.createElement('label'); label.textContent='Notes';
+        const ta=document.createElement('textarea');
+        ta.id='dlgNotesMirror';
+        ta.value=(value||'');
+        ta.dataset.key='notes';
+        wrap.append(label, ta);
+        return wrap;
+      }
+      const wrap = document.createElement('div');
+      const label = document.createElement('label'); label.textContent = FIELD_META.find(f=>f.key===key)?.label || key;
+      const inp = document.createElement('input'); inp.type=type; inp.value=(value||''); inp.dataset.key = key;
+      wrap.append(label, inp);
+      return wrap;
+    }
+
+    function openLeadDialog(lead){
+      currentDialogLead = lead;
+      if(typeof currentDialogLead.notes === 'undefined') currentDialogLead.notes = '';
+      dlgTitle.textContent = `${lead.first_name||''} ${lead.last_name||''}`.trim() || 'Lead details';
+
+      // build fields
+      leadFormFields.innerHTML='';
+      FIELD_META.forEach(f=>{ leadFormFields.appendChild(inputFor(f.key, lead[f.key])); });
+
+      // notes bind
+      dlgNotes.value = currentDialogLead.notes || '';
+      const mirror = document.getElementById('dlgNotesMirror');
+      if(mirror){ mirror.value = dlgNotes.value; mirror.addEventListener('input', ()=>{ dlgNotes.value = mirror.value; }); }
+
+      // files list
+      renderDialogFiles();
+
+      dlgOverlay.style.display='block';
+      leadDialog.style.display='block';
+    }
+    function closeLeadDialog(){
+      dlgOverlay.style.display='none';
+      leadDialog.style.display='none';
+      currentDialogLead = null;
+      dlgStmtInput.value='';
+    }
+    function saveLeadDialog(){
+      if(!currentDialogLead) return;
+      const controls = leadFormFields.querySelectorAll('[data-key]');
+      controls.forEach(el=>{
+        const k = el.dataset.key;
+        let v = el.value;
+        if(k==='phone') v = (v||'').replace(/\D/g,'');
+        if(k==='email') v = (v||'').toLowerCase();
+        currentDialogLead[k] = v;
+      });
+      currentDialogLead.notes = dlgNotes.value || '';
+      persistLead(currentDialogLead);
+      renderLeadsTable();
+      closeLeadDialog();
+    }
+
+    function onDialogFilesAdded(e){
+      if(!currentDialogLead) return;
+      const chosen = Array.from(e.target.files||[]).map(f=>({name:f.name,size:f.size,type:f.type,url:URL.createObjectURL(f)}));
+      currentDialogLead.files = [...(currentDialogLead.files||[]), ...chosen];
+      persistLead(currentDialogLead);
+      renderDialogFiles();
+      renderLeadsTable();
+      dlgStmtInput.value='';
+    }
+    function renderDialogFiles(){
+      dlgStmtList.innerHTML='';
+      const files = currentDialogLead?.files || [];
+      files.forEach((f, idx)=>{
+        const chip = document.createElement('span');
+        chip.className='file-chip';
+        const name = document.createElement('span'); name.textContent=f.name; name.style.cursor='pointer'; name.onclick=()=>{ if(f.url) window.open(f.url,'_blank'); };
+        const del = document.createElement('button'); del.textContent='✕'; del.title='Remove file'; del.onclick=()=>{ if(confirm(`Remove \"${f.name}\"?`)){ try{ if(f.url) URL.revokeObjectURL(f.url);}catch(e){}; (currentDialogLead.files||[]).splice(idx,1); persistLead(currentDialogLead); renderDialogFiles(); renderLeadsTable(); } };
+        chip.append(name, del);
+        dlgStmtList.appendChild(chip);
+      });
+    }
+    function clearDialogFiles(){
+      if(!currentDialogLead) return;
+      if(!confirm('Remove all attached documents for this lead?')) return;
+      (currentDialogLead.files||[]).forEach(f=>{ try{ if(f.url) URL.revokeObjectURL(f.url);}catch(e){} });
+      currentDialogLead.files = [];
+      persistLead(currentDialogLead);
+      renderDialogFiles();
+      renderLeadsTable();
+    }
+  </script>
+</body>
+</html>

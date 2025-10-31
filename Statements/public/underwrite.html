@@ -1,0 +1,1932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title> CROC Underwrite</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#f7f9fc;--card:#fff;--text:#111;--muted:#6b7280;--line:#e5e7eb;
+      --brand:#2563eb;--ok:#065f46;--warn:#92400e;--err:#7f1d1d;
+      --overlay:rgba(17,24,39,.45);--dot-green:#16a34a;--dot-gray:#9ca3af;
+    }
+    *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    body{margin:0;padding:24px;background:var(--bg);color:var(--text)}
+    h1{margin:0 0 16px;font-size:22px} h2{margin:0 0 10px;font-size:18px} h3{margin:0 0 12px;font-size:16px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .grid{display:grid;gap:8px}
+    label{display:block;font-size:14px;margin-bottom:6px;color:#374151}
+    input[type="file"],input[type="text"],textarea,select{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:var(--text)}
+    textarea{min-height:120px;resize:vertical}
+    button{padding:10px 14px;border:0;border-radius:10px;background:var(--brand);color:#fff;cursor:pointer}
+    button[disabled]{opacity:.6;cursor:not-allowed}
+    .muted{color:var(--muted);font-size:12px}
+    .hidden{display:none !important}
+    .actions{display:flex;gap:10px;align-items:center}
+    table{width:100%;border-collapse:collapse}
+    thead th{font-size:13px;color:#374151;border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;background:#fafafa}
+    tbody td{padding:10px;border-bottom:1px solid #f0f0f0;vertical-align:top;font-size:14px}
+    tbody tr[data-deal-id]{cursor:pointer}
+    tbody tr[data-deal-id]:hover{background:#fafafa}
+    .kvs{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+    .kv{padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+    .kv .k{font-size:12px;color:var(--muted)} .kv .v{font-weight:600}
+    .note-err{padding:10px;border:1px solid #fecdd3;background:#fff1f2;color:var(--err);border-radius:10px}
+    .note-warn{padding:10px;border:1px solid #fcd34d;background:#fffbeb;color:var(--warn);border-radius:10px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .gmail-status{display:flex;align-items:center;gap:8px;font-size:13px;color:#111}
+    .dot{width:10px;height:10px;border-radius:999px;background:var(--dot-gray);display:inline-block}
+    .dot.connected{background:var(--dot-green)}
+    .gmail-actions{display:flex;align-items:center;gap:8px}
+    .btn-light{background:#eef2ff;color:#1e40af}
+    .btn-ghost{background:#e5e7eb;color:#111}
+    .tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+    .tile{background:linear-gradient(135deg,#79d86f,#78c96a);border-radius:16px;padding:16px;border:2px solid transparent;box-shadow:0 4px 12px rgba(0,0,0,.08);cursor:pointer;user-select:none;display:flex;flex-direction:column;justify-content:center;min-height:86px;transition:transform .05s ease,border-color .15s ease,box-shadow .15s ease;text-decoration:none}
+    .tile:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,.10)}
+    .tile.selected{border-color:#14532d;box-shadow:0 0 0 2px rgba(20,83,45,.12) inset}
+    .tile .name{font-weight:800;color:#0b2b12;font-size:16px;text-align:center;line-height:1.2}
+    .tile .meta{margin-top:6px;text-align:center;font-size:12px;color:#0b2b12;opacity:.9}
+    .tile.alt1{background:linear-gradient(135deg,#60a5fa,#3b82f6)}
+    .tile.alt2{background:linear-gradient(135deg,#f59e0b,#f97316)}
+    .tile.alt3{background:linear-gradient(135deg,#a78bfa,#8b5cf6)}
+    .tiles-toolbar{display:flex;align-items:center;justify-content:space-between;margin:4px 0 12px}
+    .modal-overlay{position:fixed;inset:0;background:var(--overlay);display:none;align-items:center;justify-content:center;padding:16px;z-index:1000}
+    .modal{width:100%;max-width:720px;background:#fff;border-radius:14px;border:1px solid var(--line);box-shadow:0 24px 48px rgba(0,0,0,.18);padding:18px;animation:pop .12s ease-out}
+    @keyframes pop{from{transform:translateY(4px) scale(.98);opacity:.7}to{transform:none;opacity:1}}
+    .modal h3{margin:0 0 8px}
+    .modal .muted{margin-bottom:12px;display:block}
+    .modal .row-compact{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+    .modal .buttons{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+    .btn-neutral{background:#e5e7eb;color:#111}
+    .error-text{color:var(--err);font-size:12px;margin-top:6px;min-height:16px}
+    .wrapped-badge{display:inline-block;margin-left:6px;font-size:10px;padding:2px 6px;border-radius:999px;background:#e9ffe9;color:#065f46}
+
+
+    /* Dropzones */
+    .visually-hidden{position:absolute !important; width:1px; height:1px; margin:-1px; padding:0; border:0; clip:rect(0 0 0 0); overflow:hidden}
+    .dropzone{
+      margin-top:8px;border:2px dashed #cbd5e1;border-radius:12px;padding:16px;text-align:center;
+      font-size:13px;color:#334155;background:linear-gradient(180deg,#f8fafc,#f1f5f9);cursor:pointer;user-select:none
+    }
+    .dropzone .dz-title{font-weight:700;display:block;margin-bottom:6px}
+    .dropzone .dz-sub{font-size:12px;color:#6b7280}
+    .dropzone .dz-actions{margin-top:10px}
+    .dropzone .dz-actions .btn-pick{background:#111;color:#fff;border-radius:999px;padding:8px 12px;font-size:12px}
+    .dropzone:hover{background:#eef2f7}
+    .dropzone.dragover{border-color:#2563eb;background:#eff6ff}
+    .file-list{margin-top:8px;font-size:12px;color:#475569}
+    .file-list ul{margin:6px 0 0 0;padding-left:18px}
+    .row-tight{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+
+    .pill {display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; margin-left:6px;}
+    .pill.approved {background:#dcfce7; color:#14532d; border:1px solid #86efac;}
+    .pill.declined {background:#fee2e2; color:#7f1d1d; border:1px solid #fecaca;}
+    .pill.stips {background:#fffbeb; color:#92400e; border:1px solid #fde68a;}
+    .muted-sm {color:#6b7280; font-size:12px;}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Upload Application and Bank Statements</h1>
+    <div class="gmail-status">
+      <span id="gmailDot" class="dot" aria-hidden="true"></span>
+      <span id="gmailText">Checking Gmail…</span>
+      <div class="gmail-actions">
+        <button id="btnConnectGmail" class="btn-light">Connect Gmail</button>
+        <button id="btnDisconnectGmail" class="btn-ghost hidden">Disconnect</button>
+        <input id="emailsCSV" type="file" accept=".csv,text/csv" class="visually-hidden"/>
+        <button id="btnUploadEmails" class="btn-ghost">Upload emails.csv</button>
+        <span id="emailsStatus" class="muted" style="margin-left:6px;"></span>
+        <button id="btnLogout" class="btn-ghost">Logout</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="card" id="productSwitch">
+    <div class="tile-grid">
+      <a class="tile" id="btnMCA" href="underwrite.html">
+        <div class="name">Merchant Cash Advance</div>
+        <div class="meta">Start underwriting</div>
+      </a>
+      <div class="tile alt1" id="btnCCS">
+        <div class="name">Credit Card Split</div>
+        <div class="meta">Processor statements</div>
+      </div>
+      <div class="tile alt2" id="btnReverse">
+        <div class="name">Reverse</div>
+        <div class="meta">Bank statements</div>
+      </div>
+      <div class="tile alt3" id="btnDashboard">
+        <div class="name">Dashboard</div>
+        <div class="meta">Deals & Replies</div>
+      </div>
+       <div class="tile alt4" id="btnLeads">
+        <div class="name">Leads</div>
+        <div class="meta">Leads and Applications</div>
+      </div>
+    </div>
+  </div>
+  
+
+  <!-- Step 1 - Application (MCA only) -->
+  <div class="card" id="cardApp">
+    <div class="row-tight">
+      <h2 id="appTitle" style="margin:0">Application</h2>
+      <div class="muted">PDF only</div>
+    </div>
+    <div class="row">
+      <div>
+        <label id="appLabel">Application PDF</label>
+
+        <input id="application" type="file" accept="application/pdf" class="visually-hidden" />
+        <div id="appDrop" class="dropzone" tabindex="0" role="button" aria-label="Drop application PDF or click to pick">
+          <span class="dz-title">Upload application</span>
+          <span class="dz-sub">Drag a PDF here, or</span>
+          <div class="dz-actions"><span class="btn-pick">Choose PDF</span></div>
+        </div>
+        <div id="appPreview" class="file-list"></div>
+      </div>
+      <div class="actions" style="align-items:flex-end;">
+        <button id="btnAppExtract">Extract Application</button>
+        <span id="appStatus" class="muted"></span>
+      </div>
+    </div>
+
+    <div id="appDetails" class="grid hidden" style="margin-top:14px;">
+      <h3>Extracted Details</h3>
+      <div class="kvs" id="kvContainer"></div>
+
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>Business State</label>
+          <input id="state" type="text" placeholder="NY, CA, NJ..." maxlength="2" />
+          <div class="muted">If NY or CA, you’ll be asked for 4 months of statements. Others require 3.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 - Upload Statements -->
+  <div class="card" id="cardStatements">
+    <div class="row-tight">
+      <h2 id="stmtTitle" style="margin:0">Statements & Matrix</h2>
+      <div class="muted">PDFs only</div>
+    </div>
+    <div class="row">
+      <div>
+        <label id="stmtLabel">Bank Statements (PDFs)</label>
+
+        <input id="statements" type="file" accept="application/pdf" multiple class="visually-hidden" />
+        <div id="stmtDrop" class="dropzone" tabindex="0" role="button" aria-label="Drop statement PDFs or click to pick">
+          <span class="dz-title">Upload bank statements</span>
+          <span class="dz-sub">Drag one or more PDFs here, or</span>
+          <div class="dz-actions"><span class="btn-pick">Choose PDF(s)</span></div>
+        </div>
+
+        <div id="stmtsPreview" class="file-list"></div>
+
+        <div class="muted" id="stmtHint" style="margin-top:6px;">Upload 3 months. If the state is NY/CA, upload 4 months.</div>
+
+     
+      </div>
+      <div class="actions" style="align-items:flex-end;">
+        <button id="btnStmtsMatch">Analyze & Match</button>
+        <span id="posBadge" class="muted"></span>
+        <span id="stmtStatus" class="muted"></span>
+      </div>
+    </div>
+    <div id="stmtHelp" class="note-warn hidden" style="margin-top:10px;">
+      If nothing appears after analyzing, make sure <strong>Poppler</strong> and <strong>Tesseract</strong> are installed.
+    </div>
+  </div>
+
+  <!-- Statement Analysis (MCA only) -->
+  <div id="stmtAnalysis" class="card hidden">
+    <h3>Statement Analysis</h3>
+    <div id="stmtAgg" class="kvs" style="margin-bottom:12px;"></div>
+    <table id="stmtTable">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Bank</th>
+          <th>Account</th>
+          <th class="right">Avg Daily Balance</th>
+          <th class="right">Neg Days</th>
+          <th class="right">Credits</th>
+          <th class="right">Debits</th>
+          <th class="right">Deposits (excl Zelle)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="stmtEmpty" class="note-err hidden" style="margin-top:12px;">
+      No statement data parsed. Check PDFs and Poppler/Tesseract setup.
+    </div>
+  </div>
+
+  <!-- Lender Tiles -->
+  <div id="results" class="card hidden">
+    <div class="tiles-toolbar">
+      <h3 style="margin:0" id="resultsTitle">Suggested Lenders</h3>
+      <div class="muted" id="selectedCount">0 selected</div>
+    </div>
+    <div id="lendersGrid" class="tile-grid"></div>
+  </div>
+
+  <!-- Composer -->
+  <div id="composer" class="card hidden">
+    <h3>Compose & Send</h3>
+    <div class="row">
+      <div>
+        <label>Subject</label>
+        <input id="subject" type="text" placeholder="Submission for [Business Name]" />
+      </div>
+      <div></div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>Message</label>
+      <textarea id="message" placeholder="Write something to the lenders..."></textarea>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>CC (optional, comma separated)</label>
+      <input id="cc" type="text" placeholder="cc1@x.com, cc2@y.com" />
+    </div>
+
+    <div class="actions" style="margin-top:16px">
+      <button id="btnSend">Send</button>
+      <span id="sendStatus" class="muted"></span>
+    </div>
+  </div>
+
+  <!-- Leads -->
+<div id="leads" class="card hidden"></div>
+
+
+  <!-- Dashboard -->
+  <div id="dashboard" class="card hidden">
+   <div class="tiles-toolbar" style="gap:12px; align-items:center;">
+  <div style="display:flex; align-items:center; gap:10px; flex:1 1 auto;">
+    <h2 style="margin:0">Dashboard</h2>
+    <div id="dashSummary" class="muted"></div>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:12px;">
+    <input id="dealSearch" type="text" placeholder="Search deals…"
+           style="width:220px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px;">
+
+    <div id="pager" class="muted-sm" style="display:flex; align-items:center; gap:8px;">
+      <button id="pagePrev" class="btn-ghost" title="Previous page">Prev</button>
+      <span id="pageInfo">—</span>
+      <button id="pageNext" class="btn-ghost" title="Next page">Next</button>
+      <select id="pageSize" title="Rows per page"
+              style="padding:6px 8px; border:1px solid #d1d5db; border-radius:8px;">
+              
+        <option value="10">10</option>
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+    <div style="margin-bottom:10px">
+      <button id="dashRefresh" class="btn-ghost">Refresh</button>
+    </div>
+
+    <table id="dealsTable">
+      <thead>
+        <tr>
+          <th>Deal ID</th>
+          <th>Mode</th>
+          <th>Business Name</th>
+          <th>Sender</th>
+          <th>Sent/Err/Skip/Total</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody id="dealsTbody"></tbody>
+    </table>
+
+    <div id="dealsEmpty" class="note-err hidden" style="margin-top:10px;">
+      No deals yet.
+    </div>
+
+    <div id="dealModal" class="modal-overlay" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dealTitle">
+        <h3 id="dealTitle">Deal</h3>
+        <div id="dealBody" class="grid"></div>
+        <div class="buttons" style="margin-top:14px;">
+          <button id="dealResend" class="btn-light">Resubmit</button>
+          <button id="dealClose" class="btn-neutral">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- POSITION MODAL (MCA only) -->
+  <div id="positionModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="posTitle">
+      <h3 id="posTitle">Current MCA Position</h3>
+      <span class="muted">Tell us the <strong>current position</strong> for this business. We’ll only show lenders that support that position.</span>
+      <div class="row-compact">
+        <div>
+          <label for="posInput">Enter a number (1, 2, 3…)</label>
+          <input id="posInput" type="text" inputmode="numeric" placeholder="e.g., 3" />
+          <div id="posError" class="error-text"></div>
+        </div>
+        <button id="posConfirm" style="height: 40px;">Confirm</button>
+      </div>
+      <div class="buttons">
+        <button id="posCancel" class="btn-neutral">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = "";
+
+    // Modes
+    const MODE_MCA="MCA", MODE_CCS="CCS", MODE_REV="REV", MODE_DASH="DASH", MODE_LEADS="LEADS";
+    let CURRENT_MODE = MODE_MCA;
+
+    // Auto-select
+    const AUTO_SELECT_ENABLED=true, AUTO_SELECT_MIN_SCORE=0.0, AUTO_SELECT_MAX=30;
+
+    // State
+    let CURRENT_POSITION = null;
+    let gmailConnected=false, gmailEmail=null;
+
+    // Persisted data
+    let applicationData = null;   // may include parsed fields
+    let lastStatements  = null;
+    const selectedLenders = new Set();
+
+    // Resend context
+    let RESEND_CTX = null;
+
+    // Static lenders
+    const REVERSE_LENDERS = ["Alternative","American Choice","Arena","Barclays","Fenix","Finpoint","Fyncap","G&G","GFE","Highland Hill","Nexus","Nitro","Smart Step","Fratello","Nexi","QFS","Silverline"];
+    const CCS_LENDERS = ["Broadway","Fenix","Fundfi","Fundkite","Fundr","Rapid","Smart Step","TMR Now","Quickstone","Zinch","501 Advance","Transmarkfunding"];
+
+    // Helpers
+    const $ = (id)=>document.getElementById(id);
+    const show=(el)=>el.classList.remove("hidden");
+    const hide=(el)=>el.classList.add("hidden");
+    const fmt=(n)=>isFinite(n)?Number(n).toLocaleString():"";
+    const money=(n)=>isFinite(n)?Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):"";
+    function ordinal(n){n=Number(n);if(!isFinite(n))return String(n);const s=["th","st","nd","rd"],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);}
+    function setInputValue(id,v){const el=$(id);if(el)el.value=v??"";}
+
+    function makeStaticLenders(names){return names.map(n=>({ business_name:n, score:1.0, reason:"Program lender" }));}
+    function clearResults(){ $("lendersGrid").innerHTML=""; $("selectedCount").textContent="0 selected"; }
+
+    // ---- Formatting & dropzone helpers ----
+    function formatBytes(bytes){
+      if(!Number.isFinite(bytes)) return "";
+      const u=["B","KB","MB","GB"]; let i=0, n=bytes;
+      while(n>=1024 && i<u.length-1){ n/=1024; i++; }
+      return `${n.toFixed(n>=10||i===0?0:1)} ${u[i]}`;
+    }
+    function setupDropzone(dropId, inputId, multiple, onPick){
+      const dz=$(dropId), input=$(inputId);
+      if(!dz||!input) return;
+      const highlight = (on)=>dz.classList.toggle("dragover", !!on);
+      const pick = ()=> input.click();
+
+      dz.addEventListener("click", pick);
+      dz.addEventListener("keydown",(e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); pick(); }});
+      dz.addEventListener("dragover",(e)=>{ e.preventDefault(); highlight(true); });
+      dz.addEventListener("dragleave",()=>highlight(false));
+      dz.addEventListener("drop",(e)=>{
+        e.preventDefault(); highlight(false);
+        const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type === "application/pdf");
+        if(!files.length) return;
+        try{
+          const dt = new DataTransfer();
+          files.forEach(f => dt.items.add(f));
+          input.files = dt.files;
+        }catch(_){}
+        if(!multiple && input.files.length>1){
+          try{ const dt=new DataTransfer(); dt.items.add(input.files[0]); input.files=dt.files; }catch(_){}
+        }
+        onPick?.();
+      });
+      input.addEventListener("change", onPick);
+    }
+
+    // ---- Small file helpers for attachments ----
+    async function fileToBase64(file){
+      return new Promise((resolve,reject)=>{
+        const r=new FileReader();
+        r.onload=()=>resolve(r.result);  // data URL
+        r.onerror=reject;
+        r.readAsDataURL(file);
+      });
+    }
+    function isPDF(file){
+      const n=(file?.name||"").toLowerCase();
+      return (file?.type||"").toLowerCase().includes("pdf") || n.endsWith(".pdf");
+    }
+
+   
+
+    async function prepareApplicationFile(){
+      const box=$("appPreview");
+      const input=$("application");
+      const f=input.files[0];
+      if(!f){ box.innerHTML=""; return; }
+
+      box.innerHTML = `<strong>Selected:</strong> ${f.name} <span class="muted">(${formatBytes(f.size)})</span>`;
+    
+    }
+
+    async function prepareStatementsFiles(){
+      const box=$("stmtsPreview");
+      const input=$("statements");
+      const files = Array.from(input.files||[]);
+      if(!files.length){ box.innerHTML=""; return; }
+
+    
+    }
+
+    setupDropzone("appDrop","application",false,prepareApplicationFile);
+    setupDropzone("stmtDrop","statements",true,prepareStatementsFiles);
+
+    // ---------- Gmail status/button logic ----------
+    async function refreshGmailStatus(){
+      const dot=$("gmailDot"), txt=$("gmailText"), btnC=$("btnConnectGmail"), btnD=$("btnDisconnectGmail");
+      try{ const res=await fetch(`${API}/api/auth/google/status`); const data=await res.json(); gmailConnected=!!data.connected; gmailEmail=data.email||null; }
+      catch{ gmailConnected=false; gmailEmail=null; }
+      if(gmailConnected){ dot.classList.add("connected"); txt.textContent=`Connected: ${gmailEmail}`; btnC.classList.add("hidden"); btnD.classList.remove("hidden"); }
+      else{ dot.classList.remove("connected"); txt.textContent="Not connected"; btnC.classList.remove("hidden"); btnD.classList.add("hidden"); }
+    }
+    $("btnConnectGmail").addEventListener("click",()=>{ window.location.href=`${API}/api/auth/google/login`; });
+    $("btnDisconnectGmail").addEventListener("click",async()=>{ try{ await fetch(`${API}/api/auth/google/logout`,{method:"POST"});}catch{} refreshGmailStatus(); });
+    $("btnLogout").addEventListener("click", async () => {
+  try {
+    await fetch(`${API}/api/auth/user/logout`, { method: "POST" , credentials: "same-origin"});
+  } catch (_) {
+    /* no-op: we’ll still redirect */
+  }
+  // Clean up any local state and go to login page
+  try { sessionStorage.clear(); localStorage.removeItem("croc_email"); } catch {}
+  // Replace to prevent going back to a protected page
+  window.location.replace("/login.html?logged_out=1");
+});
+
+    // ---------- modal logic (MCA position) ----------
+    function openPositionModal(onConfirm,onCancel){
+      const overlay=$("positionModal"), input=$("posInput"), err=$("posError"), ok=$("posConfirm"), cancel=$("posCancel");
+      err.textContent=""; input.value = CURRENT_POSITION!=null?String(CURRENT_POSITION):"";
+      overlay.style.display="flex"; overlay.setAttribute("aria-hidden","false"); setTimeout(()=>input.focus(),0);
+      function cleanup(){ overlay.style.display="none"; overlay.setAttribute("aria-hidden","true");
+        ok.removeEventListener("click",handleOk); cancel.removeEventListener("click",handleCancel);
+        overlay.removeEventListener("click",onBackdrop); document.removeEventListener("keydown",onEsc); }
+      function parse(v){ const m=String(v||"").match(/\d+/); if(!m) return null; const n=parseInt(m[0],10); return (n>=1&&n<=10)?n:null; }
+      function handleOk(e){ e.preventDefault(); const n=parse(input.value); if(n==null){ err.textContent="Enter 1-10."; input.focus(); return; } cleanup(); onConfirm?.(n); }
+      function handleCancel(e){ e.preventDefault(); cleanup(); onCancel?.(); }
+      function onBackdrop(e){ if(e.target===overlay) handleCancel(e); }
+      function onEsc(e){ if(e.key==="Escape") handleCancel(e); if(e.key==="Enter") handleOk(e); }
+      ok.addEventListener("click",handleOk); cancel.addEventListener("click",handleCancel); overlay.addEventListener("click",onBackdrop); document.addEventListener("keydown",onEsc);
+    }
+    function ensurePosition(){ if(CURRENT_POSITION!=null) return Promise.resolve(CURRENT_POSITION);
+      return new Promise((res,rej)=>openPositionModal(n=>{CURRENT_POSITION=n;res(n);},()=>rej(new Error("Position required")))); }
+
+    // ---------- Mode switching ----------
+    function setMode(mode){
+      CURRENT_MODE=mode;
+      clearResults(); selectedLenders.clear(); $("selectedCount").textContent="0 selected";
+      hide($("dashboard"));
+      if (mode === MODE_MCA) {
+        $("resultsTitle").textContent = "Suggested Lenders";
+        $("stmtTitle").textContent = " Statements & Matrix";
+        $("stmtLabel").textContent = "Bank Statements (PDFs)";
+        $("stmtHint").textContent = "Upload 3 months. If the state is NY/CA, upload 4 months.";
+        $("btnStmtsMatch").style.display = "";
+        $("posBadge").style.display = "";
+        hide($("stmtAnalysis"));
+        show($("cardApp"));
+        show($("cardStatements"));
+        hide($("results"));
+        hide($("composer"));
+        hide($("dashboard"));
+      } else if (mode === MODE_CCS) {
+        $("resultsTitle").textContent = "Credit Card Split Lenders";
+        $("stmtTitle").textContent = "Upload Credit Card Statements";
+        $("stmtLabel").textContent = "Credit Card Processor Statements (PDFs)";
+        $("stmtHint").textContent = "Upload recent processor statements (no analysis needed).";
+        $("btnStmtsMatch").style.display = "none";
+        $("posBadge").style.display = "none";
+        hide($("cardApp"));
+        show($("cardStatements"));
+        hide($("stmtAnalysis"));
+        hide($("dashboard"));
+        renderLenders(makeStaticLenders(CCS_LENDERS));
+        show($("results"));
+        show($("composer"));
+      } else if (mode === MODE_REV) {
+        $("resultsTitle").textContent = "Reverse Lenders";
+        $("stmtTitle").textContent = "Upload Bank Statements";
+        $("stmtLabel").textContent = "Bank Statements (PDFs)";
+        $("stmtHint").textContent = "Upload recent bank statements (no analysis needed).";
+        $("btnStmtsMatch").style.display = "none";
+        $("posBadge").style.display = "none";
+        hide($("cardApp"));
+        show($("cardStatements"));
+        hide($("stmtAnalysis"));
+        hide($("dashboard"));
+        renderLenders(makeStaticLenders(REVERSE_LENDERS));
+        show($("results"));
+        show($("composer"));
+      } else if (mode === MODE_DASH) {
+        hide($("cardApp"));
+        hide($("cardStatements"));
+        hide($("stmtAnalysis"));
+        hide($("results"));
+        hide($("composer"));
+        show($("dashboard"));
+        loadDeals();
+      } else if (mode === MODE_LEADS) {
+        hide($("cardApp")); hide($("cardStatements")); hide($("stmtAnalysis"));
+        hide($("results")); hide($("composer"));
+        show($("leads"));  
+        installLeadsExitPatches();           
+        loadLeads();                 // see next step
+    }
+  }
+    $("btnMCA").addEventListener("click",(e)=>{e.preventDefault();setMode(MODE_MCA);});
+    $("btnCCS").addEventListener("click",()=>setMode(MODE_CCS));
+    $("btnReverse").addEventListener("click",()=>setMode(MODE_REV));
+    $("btnDashboard").addEventListener("click",(e)=>{e.preventDefault?.();setMode(MODE_DASH);});
+    $("btnLeads").addEventListener("click", () => setMode(MODE_LEADS));
+
+
+    // ---------- Step 1 - Extract Application ----------
+    $("btnAppExtract").addEventListener("click", async () => {
+      if (CURRENT_MODE !== MODE_MCA) return;
+      const application = $("application").files[0];
+      if (!application) return alert("Upload the application PDF.");
+
+      $("btnAppExtract").disabled = true;
+      $("appStatus").textContent = "Extracting...";
+
+      const form = new FormData();
+      form.append("application", application);
+
+      try {
+        const res = await fetch(`${API}/api/underwrite/extract-application`, { method: "POST", body: form, credentials: "include",});
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Extraction failed.");
+
+        applicationData = data.application || {};
+        renderKV($("kvContainer"), applicationData);
+        // Prefill subject with template (DealID will be filled by server)
+        const bn = applicationData.business_name || "";
+        $("subject").value = `New Submission - Harvest Lending/Pathway Catalyst - ${bn} - #DealID`;
+
+
+        const stateGuess = (applicationData.state || "").toString().trim().toUpperCase();
+        if (stateGuess && stateGuess.length === 2) $("state").value = stateGuess;
+
+        show($("appDetails"));
+        show($("cardStatements"));
+        $("appStatus").textContent = "Done";
+      } catch (e) {
+        alert(e.message || "Something went wrong.");
+        $("appStatus").textContent = "";
+      } finally {
+        $("btnAppExtract").disabled = false;
+      }
+    });
+
+    function renderKV(container, data) {
+      container.innerHTML = "";
+      if (!data || typeof data !== "object") return;
+      [
+        ["business_name","Business Name"],
+        ["state","State"],
+        ["industry","Industry"],
+        ["fico","FICO"],
+        ["length_of_ownership","Length of Ownership"],
+        ["length_months","TIB (months)"]
+      ].forEach(([k,label]) => {
+        if (data[k] === undefined || data[k] === null || String(data[k]).trim()==="") return;
+        const box = document.createElement("div"); box.className="kv";
+        box.innerHTML = `<div class="k">${label}</div><div class="v">${(typeof data[k]==="object")? JSON.stringify(data[k]) : String(data[k])}</div>`;
+        container.appendChild(box);
+      });
+    }
+
+    // ---------- Step 2 - Analyze & Match ----------
+    $("btnStmtsMatch").addEventListener("click", async () => {
+      if (CURRENT_MODE !== MODE_MCA) return alert("Switch back to Merchant Cash Advance to analyze & match.");
+      if (!applicationData) return alert("Extract the application first.");
+
+      try {
+        const n = await ensurePosition();
+        $("posBadge").textContent = `Current position: ${ordinal(n)}`;
+        applicationData.positions = n;
+      } catch {
+        alert("Please provide the current position to continue.");
+        return;
+      }
+
+      const state = ($("state").value || applicationData.state || "").trim().toUpperCase();
+      if (!state || state.length !== 2) return alert("Enter a 2-letter state code.");
+
+      const statements = Array.from($("statements").files || []);
+      const need = (state === "NY" || state === "CA") ? 4 : 3;
+      if (statements.length < need) {
+        return alert(`Please upload at least ${need} statement PDFs for ${state}.`);
+      }
+
+      $("btnStmtsMatch").disabled = true;
+      $("stmtStatus").textContent = "Analyzing statements and matching...";
+
+      const form = new FormData();
+      statements.forEach(f => form.append("statements", f));
+      form.append("state", state);
+      form.append("application_json", JSON.stringify(applicationData)); // includes .positions
+      if (RESEND_CTX && RESEND_CTX.mode === MODE_MCA && RESEND_CTX.statements) {
+        form.append("existing_statements_json", JSON.stringify(RESEND_CTX.statements));
+      }
+
+      try {
+        const res = await fetch(`${API}/api/underwrite/statements-and-match`, { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Analysis failed.");
+
+        lastStatements = data.statements || null;
+        renderStatementAnalysis(lastStatements);
+
+        const matched = (data.lenders || []).filter(x => Number(x.score) > 0);
+        if (!matched.length) {
+          alert(`No lenders matched for ${ordinal(CURRENT_POSITION)} position with the current data.`);
+        }
+        renderLenders(matched);
+
+        show($("results"));
+        show($("composer"));
+        $("stmtStatus").textContent = "Done";
+      } catch (e) {
+        show($("stmtHelp"));
+        alert(e.message || "Something went wrong.");
+        $("stmtStatus").textContent = "";
+      } finally {
+        $("btnStmtsMatch").disabled = false;
+      }
+    });
+
+    function renderStatementAnalysis(statements) {
+      if (!statements || typeof statements !== "object") {
+        show($("stmtHelp"));
+        return;
+      }
+      show($("stmtAnalysis"));
+
+      const agg = $("stmtAgg");
+      agg.innerHTML = "";
+      const kv = (k, v) => `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+
+      const md = statements.monthly_deposits || {};
+      const months = Object.keys(md).sort().map(m => `${m}: $${money(md[m])}`).join(" • ") || "—";
+
+      agg.insertAdjacentHTML("beforeend", kv("Average Revenue", statements.average_revenue != null ? `$${money(statements.average_revenue)}` : "—"));
+      agg.insertAdjacentHTML("beforeend", kv("Avg Daily Balance (mean)", statements.average_daily_balance != null ? `$${money(statements.average_daily_balance)}` : "—"));
+      agg.insertAdjacentHTML("beforeend", kv("Aggregate Negative Days", fmt(statements.aggregate_negative_days || 0)));
+      agg.insertAdjacentHTML("beforeend", kv("Deposits by Month", months));
+
+      const tbody = $("stmtTable").querySelector("tbody");
+      tbody.innerHTML = "";
+      const list = statements.per_statement || [];
+
+      if (!list.length) {
+        show($("stmtEmpty"));
+        return;
+      }
+      hide($("stmtEmpty"));
+
+      list.forEach(s => {
+        const tr = document.createElement("tr");
+        const cells = [
+          s.statement_month || "—",
+          s.bank_name || "—",
+          s.account_number || "—",
+          s.average_daily_balance != null ? `$${money(s.average_daily_balance)}` : "—",
+          fmt(s.negative_ending_days || 0),
+          fmt(s.credit_count || 0),
+          fmt(s.debit_count || 0),
+          `$${money(s.monthly_deposits_excl_zelle || 0)}`
+        ];
+        cells.forEach((c, i) => {
+          const td = document.createElement("td");
+          td.textContent = String(c);
+          if ([3,4,5,6,7].includes(i)) td.style.textAlign = "right";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ---------- Lenders (auto-select) ----------
+    function renderLenders(list) {
+      const grid = $("lendersGrid");
+      grid.innerHTML = "";
+      selectedLenders.clear();
+      $("selectedCount").textContent = "0 selected";
+
+      if (!Array.isArray(list) || list.length === 0) {
+        const note = document.createElement("div");
+        note.className = "note-err";
+        note.textContent = "No lenders matched.";
+        grid.appendChild(note);
+        return;
+      }
+
+      let autoSelected = 0;
+
+      list.forEach(item => {
+        const name = item.business_name || "(Unnamed)";
+        let scoreNum = Number(item.score);
+        if (!isFinite(scoreNum)) scoreNum = 0;
+        const scorePct = Math.round(scoreNum * 100);
+        const reason = item.reason || "";
+
+        const tile = document.createElement("div");
+        tile.className = "tile";
+        tile.title = reason;
+        tile.innerHTML = `<div class="name">${name}</div><div class="meta">${scorePct}%</div>`;
+
+        const eligible = scoreNum > AUTO_SELECT_MIN_SCORE;
+        if (AUTO_SELECT_ENABLED && eligible && autoSelected < AUTO_SELECT_MAX) {
+          tile.classList.add("selected");
+          selectedLenders.add(name);
+          autoSelected += 1;
+        }
+
+        tile.addEventListener("click", () => {
+          if (tile.classList.contains("selected")) {
+            tile.classList.remove("selected");
+            selectedLenders.delete(name);
+          } else {
+            tile.classList.add("selected");
+            selectedLenders.add(name);
+          }
+          $("selectedCount").textContent = `${selectedLenders.size} selected`;
+        });
+
+        grid.appendChild(tile);
+      });
+
+      $("selectedCount").textContent = `${selectedLenders.size} selected`;
+    }
+
+    // ---------- Build per-lender attachments (with lender-name watermark at SEND time) ----------
+    async function buildPerLenderAttachments(lenders){
+      const appFile = $("application")?.files?.[0] || null;
+      const stmtFiles = Array.from($("statements")?.files || []);
+      const allFiles = [ ...(appFile ? [appFile] : []), ...stmtFiles ];
+
+      const perMap = {};
+     
+      for (let i=0;i<lenders.length;i++){
+        const lender = lenders[i];
+        $("sendStatus").textContent = `Preparing ${i+1}/${lenders.length}: ${lender}…`;
+        const list = [];
+
+        for (const f of allFiles){
+          let out = f;
+          try{
+  
+          }catch(e){
+            console.warn(`Watermark failed for ${f.name} (${lender}); sending original.`, e);
+            out = f;
+          }
+          const b64 = await fileToBase64(out);
+          list.push({ name: f.name, data: b64 });
+        }
+        perMap[lender] = list;
+      }
+      return perMap;
+    }
+
+    // ---------- Send ----------
+    $("btnSend").addEventListener("click", async () => {
+      if (!gmailConnected) {
+        const go = confirm("Gmail is not connected. Connect now?");
+        if (go) window.location.href = `${API}/api/auth/google/login`;
+        return;
+      }
+
+      const chosen = Array.from(selectedLenders);
+      if (!chosen.length) return alert("Select at least one lender.");
+
+      const appFile = $("application")?.files?.[0] || null;
+      const stmtFiles = Array.from($("statements")?.files || []);
+      const allFiles = [ ...(appFile ? [appFile] : []), ...stmtFiles ];
+      if (!allFiles.length) {
+        const cont = confirm("No PDFs selected to attach. Send without attachments?");
+        if (!cont) return;
+      }
+
+      $("btnSend").disabled = true;
+
+      // Build per-lender attachments (with lender-name watermark)
+      let perMap = {};
+      try{
+        perMap = await buildPerLenderAttachments(chosen);
+      }catch(e){
+        console.error(e);
+        alert("Failed preparing per-lender attachments.");
+        $("btnSend").disabled = false;
+        return;
+      }
+
+    const per_lender_attachments = Object.entries(perMap).map(([lender_name, files]) => ({
+    lender_name,files // [{name, mime, data(base64)}...], all *.wrapped.pdf
+    }));
+
+      $("sendStatus").textContent = "Sending…";
+
+      const payload = {
+        selected_lenders: chosen,
+        subject: $("subject").value || "Submission",
+        message: $("message").value || "",
+        cc: ($("cc").value || "").split(",").map(s => s.trim()).filter(Boolean),
+        mode: CURRENT_MODE,
+        application: applicationData || {},
+        statements: lastStatements || {},
+        per_lender_attachments:perMap
+      };
+
+      if (RESEND_CTX) {
+        payload.parent_deal_id = RESEND_CTX.dealId;
+        payload.exclude = Array.from(RESEND_CTX.alreadySent || []);
+      }
+
+      try {
+        const res = await fetch(`${API}/api/underwrite/send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Send failed.");
+
+        const sent = (data.deliveries || []).filter(d => d.status === "sent").length;
+        const skipped = (data.deliveries || []).filter(d => d.status === "skipped").length;
+        alert(`Sent to ${sent} lender(s).${skipped ? " " + skipped + " skipped." : ""}`);
+        $("sendStatus").textContent = "Done";
+        sessionStorage.setItem("afterSendGoTo", "DASH");
+        setTimeout(() => window.location.reload(), 350);
+      } catch (e) {
+        alert(e.message || "Something went wrong.");
+        $("sendStatus").textContent = "";
+      } finally {
+        $("btnSend").disabled = false;
+      }
+    });
+
+    // ---------- Dashboard wiring ----------
+function tsToLocal(ts){
+  if (!ts) return "—";
+  const d = new Date(typeof ts === "number" ? (ts > 1e12 ? ts : ts * 1000) : ts);
+  return isNaN(d) ? "" : d.toLocaleString();
+}
+const fmtWhen = (ts) => {
+  if (!ts) return "";
+  const d = new Date(typeof ts === "number" ? (ts > 1e12 ? ts : ts * 1000) : ts);
+  return isNaN(d) ? "" : d.toLocaleString();
+};
+
+    async function loadDeals() {
+      const tbody = $("dealsTbody");
+      const empty = $("dealsEmpty");
+      const summary = $("dashSummary");
+      tbody.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
+      empty.classList.add("hidden");
+
+      try {
+        const r = await fetch(`${API}/api/underwrite/deals`);
+        const data = await r.json();
+        const deals = data.deals || [];
+
+        renderDealsTable(deals);
+        annotateDealsWithDecisionPills();
+        const total = deals.length;
+        const sent = deals.reduce((a, d) => a + (Number(d.sent_count ?? 0)), 0);
+        const err  = deals.reduce((a, d) => a + (Number(d.error_count ?? 0)), 0);
+        const skip = deals.reduce((a, d) => a + (Number(d.skipped_count ?? 0)), 0);
+        summary.textContent = `${total} deal${total===1?"":"s"} • sent ${sent}, errors ${err}, skipped ${skip}`;
+        if (!deals.length) empty.classList.remove("hidden");
+      } catch (e) {
+        tbody.innerHTML = "";
+        empty.classList.remove("hidden");
+        summary.textContent = "Failed to load deals.";
+      }
+    }
+
+    function renderDealsTable(deals) {
+      const tbody = $("dealsTbody");
+      tbody.innerHTML = "";
+
+      if (!Array.isArray(deals) || !deals.length) return;
+
+      deals.forEach(d => {
+        const tr = document.createElement("tr");
+        tr.dataset.dealId = d.id;
+
+        const sent = Number(d.sent_count ?? 0);
+        const err  = Number(d.error_count ?? 0);
+        const skip = Number(d.skipped_count ?? 0);
+        const tot  = Number((d.deliveries_count ?? (sent + err + skip)) || 0);
+
+        const biz = (d.business_name && String(d.business_name).trim()) ? d.business_name : (d.subject || "");
+
+        tr.innerHTML = `
+          <td>${d.id}</td>
+          <td>${d.mode || ""}</td>
+          <td>${biz}</td>
+          <td>${d.sender_email || ""}</td>
+          <td>${sent}/${err}/${skip}/${tot}</td>
+          <td>${fmtWhen(d.created_at)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    $("dealsTbody").addEventListener("click", (e) => {
+      const tr = e.target.closest("tr[data-deal-id]");
+      if (tr) openDealModal(tr.dataset.dealId);
+    });
+
+    $("dashRefresh").addEventListener("click", loadDeals);
+
+    // ---- Deal Details Modal + Resubmit ----
+   async function openDealModal(dealId) {
+  let deal = null;
+  try {
+    const r = await fetch(`${API}/api/underwrite/deal/${dealId}`);
+    if (!r.ok) {
+      if (r.status === 404) {
+        const r2 = await fetch(`${API}/api/underwrite/deals/${dealId}/deliveries`);
+        const fallback = r2.ok ? await r2.json() : { deliveries: [] };
+        const list = fallback.deliveries || [];
+        $("dealTitle").textContent = `Deal #${dealId}`;
+        $("dealBody").innerHTML = `
+          <div class="muted">Application/Statements detail endpoint not available.</div>
+          <h4 style="margin:12px 0 6px;">Deliveries</h4>
+          <div style="overflow:auto;">
+            <table style="min-width:600px;">
+              <thead><tr><th>When</th><th>Lender</th><th>To</th><th>Status</th><th>Provider</th></tr></thead>
+              <tbody>${
+                list.map(v => `
+                  <tr>
+                    <td>${fmtWhen(v.created_at)}</td>
+                    <td>${v.lender || ""}</td>
+                    <td>${v.to || v.to_email || ""}</td>
+                    <td>${v.status || ""}</td>
+                    <td>${v.provider || ""}</td>
+                  </tr>
+                `).join("") || '<tr><td colspan="5" class="muted">No deliveries</td></tr>'
+              }</tbody>
+            </table>
+          </div>
+        `;
+        // NEW: make the deal body vertically scrollable
+        $("dealBody").style.maxHeight = "70vh";
+        $("dealBody").style.overflowY = "auto";
+      } else {
+        const text = await r.text().catch(()=>"");
+        console.error("Deal fetch failed", r.status, text);
+        alert(`Failed to load deal #${dealId} (HTTP ${r.status}).`);
+        return;
+      }
+    } else {
+      const { deal: d } = await r.json();
+      deal = d;
+
+      const app = deal.application || {};
+      const stm = deal.statements || {};
+      const delivs = deal.deliveries || [];
+
+      const appKV = [
+        ["Business Name", app.business_name],
+        ["State", app.state],
+        ["Industry", app.industry],
+        ["FICO", app.fico],
+        ["TIB (months)", app.length_months]
+      ].filter(([_, v]) => v != null && String(v).trim() !== "")
+       .map(([k, v]) => `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+
+      const stmAgg = `
+        <div class="kv"><div class="k">Avg Revenue</div><div class="v">${stm.average_revenue != null ? `$${Number(stm.average_revenue).toLocaleString()}` : "—"}</div></div>
+        <div class="kv"><div class="k">Avg Daily Balance</div><div class="v">${stm.average_daily_balance != null ? `$${Number(stm.average_daily_balance).toLocaleString()}` : "—"}</div></div>
+        <div class="kv"><div class="k">Neg Days (agg)</div><div class="v">${stm.aggregate_negative_days ?? "—"}</div></div>
+      `;
+
+      const per = (stm.per_statement || []).map(s => `
+        <tr>
+          <td>${s.statement_month || "—"}</td>
+          <td>${s.bank_name || "—"}</td>
+          <td>${s.account_number || "—"}</td>
+          <td style="text-align:right">${s.average_daily_balance != null ? Number(s.average_daily_balance).toLocaleString() : "—"}</td>
+          <td style="text-align:right">${s.negative_ending_days ?? 0}</td>
+          <td style="text-align:right">${s.credit_count ?? 0}</td>
+          <td style="text-align:right">${s.debit_count ?? 0}</td>
+        </tr>
+      `).join("");
+
+      const delRows = delivs.map(v => `
+        <tr>
+          <td>${fmtWhen(v.created_at)}</td>
+          <td>${v.lender || ""}</td>
+          <td>${v.to_email || v.to || ""}</td>
+          <td>${v.status || ""}</td>
+          <td>${v.provider || ""}</td>
+        </tr>
+      `).join("");
+
+      $("dealTitle").textContent = `Deal #${dealId} — ${deal.subject || app.business_name || ""}`;
+      $("dealBody").innerHTML = `
+        <h4 style="margin:6px 0;">Application</h4>
+        <div class="kvs" style="margin-bottom:8px;">${appKV || '<div class="muted">No application data</div>'}</div>
+
+        <h4 style="margin:10px 0 6px;">Statements (summary)</h4>
+        <div class="kvs" style="margin-bottom:8px;">${stmAgg}</div>
+
+        <div style="overflow:auto; margin-top:6px;">
+          <table style="min-width:720px;">
+            <thead>
+              <tr><th>Month</th><th>Bank</th><th>Account</th><th class="right">Avg Daily Balance</th><th class="right">Neg Days</th><th class="right">Credits</th><th class="right">Debits</th></tr>
+            </thead>
+            <tbody>${per || '<tr><td colspan="7" class="muted">No per-statement rows</td></tr>'}</tbody>
+          </table>
+        </div>
+
+        <h4 style="margin:12px 0 6px;">Deliveries</h4>
+        <div style="overflow:auto;">
+          <table style="min-width:600px;">
+            <thead><tr><th>When</th><th>Lender</th><th>To</th><th>Status</th><th>Provider</th></tr></thead>
+            <tbody>${delRows || '<tr><td colspan="5" class="muted">No deliveries</td></tr>'}</tbody>
+          </table>
+        </div>
+      `;
+      // NEW: make the deal body vertically scrollable
+        $("dealBody").style.maxHeight = "70vh";
+        $("dealBody").style.overflowY = "auto";
+    }
+
+    /* ---------- NEW: Decisions section (append-only) ---------- */
+try {
+  const rD = await fetch(`${API}/api/decisions/deal/${dealId}`);
+  if (rD.ok) {
+    const dj = await rD.json();
+
+    // accept multiple response shapes
+    let decisions = dj.decisions || dj.events || dj.states || [];
+    if (!Array.isArray(decisions)) decisions = [];
+
+    // normalize & sort (newest first)
+    const norm = (v) => {
+      const parseMaybeJSON = (x) => {
+        if (!x) return {};
+        if (typeof x === "object") return x;
+        try { return JSON.parse(String(x)); } catch { return String(x); }
+      };
+      let ts = v.updated_at;
+      // accept epoch seconds, ms, or iso-ish string
+      if (typeof ts === "string" && /^\d+$/.test(ts)) ts = Number(ts);
+      if (typeof ts === "number") {
+        if (ts > 1e12) ts = Math.round(ts / 1000); // ms -> s
+      }
+      return {
+        lender: v.lender || v.provider || "",
+        status: v.status || v.event_type || "",
+        reason: v.reason || v.note || "",
+        offer: parseMaybeJSON(v.offer || v.offer_json),
+        stips: parseMaybeJSON(v.stips || v.stips_json),
+        updated_at: ts || v.updated_at || null,
+      };
+    };
+
+    decisions = decisions.map(norm).sort((a,b) => {
+      const ax = typeof a.updated_at === "number" ? a.updated_at : 0;
+      const bx = typeof b.updated_at === "number" ? b.updated_at : 0;
+      return bx - ax;
+    });
+
+    // inject minimal styles once
+    if (!document.getElementById("decisionsPillStyle")) {
+      const st = document.createElement("style");
+      st.id = "decisionsPillStyle";
+      st.textContent = `
+        .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #d1d5db;background:#f3f4f6;color:#111}
+        .pill.approved{background:#dcfce7;border-color:#86efac;color:#065f46}
+        .pill.declined{background:#fee2e2;border-color:#fecaca;color:#7f1d1d}
+        .pill.stips{background:#fffbeb;border-color:#fde68a;color:#92400e}
+      `;
+      document.head.appendChild(st);
+    }
+
+    const statusPill = (s) => {
+      const t = (s || "").toUpperCase();
+      if (t === "APPROVED") return `<span class="pill approved">Approved</span>`;
+      if (t === "DECLINED") return `<span class="pill declined">Declined</span>`;
+      if (t === "STIPS_REQUIRED" || t === "STIPS" || t === "NEED_INFO") return `<span class="pill stips">STIPs</span>`;
+      return `<span class="pill">${s || "—"}</span>`;
+    };
+    const pretty = (obj) => {
+      if (obj == null) return "";
+      if (typeof obj === "string") return obj.length > 160 ? obj.slice(0,160) + "…" : obj;
+      try {
+        const s = JSON.stringify(obj);
+        return s.length > 160 ? s.slice(0,160) + "…" : s;
+      } catch { return ""; }
+    };
+    const whenStr = (u) => {
+      if (typeof u === "number" && Number.isFinite(u)) {
+        try { return new Date(u * 1000).toLocaleString(); } catch { /* fall through */ }
+      }
+      return u ? String(u) : "";
+    };
+
+    const rows = decisions.map(v => `
+      <tr>
+        <td>${v.lender || ""}</td>
+        <td>${statusPill(v.status)}</td>
+        <td>${v.reason || ""}</td>
+        <td>${pretty(v.offer)}</td>
+        <td>${pretty(v.stips)}</td>
+        <td>${whenStr(v.updated_at)}</td>
+      </tr>
+    `).join("");
+
+    const html = `
+      <h4 style="margin:12px 0 6px;">Decisions</h4>
+      <div style="overflow:auto;">
+        <table style="min-width:680px;">
+          <thead>
+            <tr><th>Lender</th><th>Status</th><th>Reason</th><th>Offer</th><th>STIPs</th><th>Updated</th></tr>
+          </thead>
+          <tbody>${rows || `<tr><td colspan="6" class="muted">No decisions yet</td></tr>`}</tbody>
+        </table>
+      </div>
+    `;
+    $("dealBody").insertAdjacentHTML("beforeend", html);
+  }
+} catch (e) {
+  console.warn("Decisions fetch failed", e);
+}
+/* ---------- END new section ---------- */
+
+
+    // Resubmit button wiring (unchanged)
+    window._lastOpenedDeal = deal ? { dealId, deal } : null;
+    const overlay = $("dealModal");
+    const closeBtn = $("dealClose");
+    const resendBtn = $("dealResend");
+
+    if (resendBtn) {
+      if (deal) {
+        resendBtn.disabled = false;
+        resendBtn.classList.remove("hidden");
+        resendBtn.onclick = () => {
+          try {
+            startResendFromDeal(dealId, deal);
+            overlay.style.display = "none";
+            overlay.setAttribute("aria-hidden", "true");
+          } catch (e) {
+            console.error(e);
+            alert("Unable to start resend.");
+          }
+        };
+      } else {
+        resendBtn.disabled = true;
+        resendBtn.classList.add("hidden");
+        resendBtn.onclick = null;
+      }
+    }
+
+    const close = () => {
+      overlay.style.display = "none";
+      overlay.setAttribute("aria-hidden", "true");
+      overlay.removeEventListener("click", onBackdrop);
+      closeBtn?.removeEventListener("click", close);
+      document.removeEventListener("keydown", onEsc);
+    };
+    const onBackdrop = (e) => { if (e.target === overlay) close(); };
+    const onEsc = (e) => { if (e.key === "Escape") close(); };
+
+    overlay.style.display = "flex";
+    overlay.setAttribute("aria-hidden", "false");
+    overlay.addEventListener("click", onBackdrop);
+    closeBtn?.addEventListener("click", close);
+    document.addEventListener("keydown", onEsc);
+  } catch {
+    alert("Failed to load deal details.");
+  }
+}
+
+
+    async function startResendFromDeal(dealId, deal){
+      const mode=(deal.mode||"MCA").toUpperCase();
+      const application=deal.application||{};
+      const statements=deal.statements||{};
+      const alreadySent=new Set((deal.deliveries||[]).map(d=>(d.lender||"").trim().toLowerCase()));
+      RESEND_CTX={ dealId, mode, application, statements, alreadySent };
+      const bn2 = (application.business_name || "");
+      $("subject").value = deal.subject || `New Submission - Harvest Lending/Pathway Catalyst - ${bn2} - #DealID`;
+
+
+      setMode(mode);
+
+      if(mode===MODE_MCA){
+        applicationData={...application};
+        show($("cardApp")); show($("cardStatements"));
+        renderKV($("kvContainer"), applicationData);
+        setInputValue("state", (applicationData.state||"").toString().toUpperCase());
+        $("posBadge").textContent = applicationData.positions ? `Current position: ${ordinal(applicationData.positions)}` : "";
+        renderStatementAnalysis(statements);
+
+        try{
+          const r=await fetch(`/api/underwrite/rematch`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({application,statements,mode:"MCA"})});
+          const j=await r.json(); let list=j.lenders||[];
+          list=list.filter(x=>!alreadySent.has((x.business_name||"").trim().toLowerCase()));
+          renderLenders(list); show($("results")); show($("composer"));
+        }catch(e){ console.error(e); alert("Could not recompute lender matches."); }
+      }else if(mode===MODE_CCS){
+        const list=makeStaticLenders(CCS_LENDERS).filter(x=>!alreadySent.has((x.business_name||"").trim().toLowerCase()));
+        hide($("cardApp")); show($("cardStatements")); hide($("stmtAnalysis")); renderLenders(list); show($("results")); show($("composer"));
+      }else if(mode===MODE_REV){
+        const list=makeStaticLenders(REVERSE_LENDERS).filter(x=>!alreadySent.has((x.business_name||"").trim().toLowerCase()));
+        hide($("cardApp")); show($("cardStatements")); hide($("stmtAnalysis")); renderLenders(list); show($("results")); show($("composer"));
+      }
+
+      // Refresh preview badges
+      await prepareApplicationFile();
+      await prepareStatementsFiles();
+    }
+
+    // ---------- Init ----------
+    const _go = sessionStorage.getItem("afterSendGoTo");
+    if (_go === "DASH") {
+      sessionStorage.removeItem("afterSendGoTo");
+      setMode(MODE_DASH);
+    } else {
+      setMode(MODE_MCA);
+    }
+    refreshGmailStatus();
+
+  function statusToPill(s){
+  const t = (s||"").toUpperCase();
+  if (t === "APPROVED") return `<span class="pill approved">Approved</span>`;
+  if (t === "DECLINED") return `<span class="pill declined">Declined</span>`;
+  if (t === "STIPS_REQUIRED") return `<span class="pill stips">STIPs</span>`;
+  return "";
+}
+
+// annotate Business Name cells with aggregated pills
+async function annotateDealsWithDecisionPills(){
+  const rows = Array.from(document.querySelectorAll("#dealsTbody tr[data-deal-id]"));
+  if (!rows.length) return;
+  const ids = rows.map(tr => tr.dataset.dealId);
+  try{
+    const r = await fetch(`/api/decisions/summary?deal_ids=${ids.join(",")}`);
+    const map = await r.json(); // { "12": {approved, declined, stips}, ... }
+    rows.forEach(tr => {
+      const id = tr.dataset.dealId;
+      const d = map[id];
+      if (!d) return;
+      const cell = tr.children[2]; // Business Name column
+      const parts = [];
+      if (d.approved) parts.push(`<span class="pill approved">${d.approved} Approved</span>`);
+      if (d.stips)    parts.push(`<span class="pill stips">${d.stips} STIPs</span>`);
+      if (d.declined) parts.push(`<span class="pill declined">${d.declined} Declined</span>`);
+      if (parts.length) {
+        const span = document.createElement("span");
+        span.style.marginLeft = "6px";
+        span.innerHTML = parts.join(" ");
+        cell.appendChild(span);
+      }
+    });
+  }catch(e){ console.warn("decisions summary failed", e); }
+}
+
+
+    // Initialize previews if files are preselected
+    prepareApplicationFile();
+    prepareStatementsFiles();
+
+
+async function verifyAuth() {
+  try {
+    const r = await fetch("/api/auth/user/status", { credentials: "same-origin" });
+    const j = await r.json();
+    if (!j.logged_in) {
+      // Replace so back button won’t return to this page
+      window.location.replace("/login.html?expired=1");
+    }
+  } catch {
+    window.location.replace("/login.html?expired=1");
+  }
+}
+
+// Run on load
+verifyAuth();
+
+// Run if coming back from browser back/forward cache
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted) verifyAuth();
+});
+
+// Also run when tab becomes visible again
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") verifyAuth();
+});
+// ---- Emails book status/upload ----
+ async function refreshEmailsBookStatus(){
+  const el = document.getElementById("contactsStatus") || document.getElementById("emailsBookStatus");
+  if (!el) return; // label not present
+  try {
+    const r = await fetch(`${API}/api/underwrite/emails-book/status`, { cache: "no-store" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    const n = Number(j.count ?? 0);
+    const src = j.source || "csv";
+    const updated = j.updated_at ? new Date(j.updated_at * 1000).toLocaleString() : "";
+    el.textContent = n > 0 ? `Contacts: ${n} (${src})` : `Contacts: not uploaded`;
+    el.title = j.filename ? `File: ${j.filename}${updated ? " • Updated: " + updated : ""}` : "";
+    el.classList.toggle("muted", n === 0);
+  } catch (e) {
+    el.textContent = "Contacts: not uploaded";
+    el.title = e.message || "";
+    el.classList.add("muted");
+  }
+}
+
+  $("btnUploadEmails").addEventListener("click", ()=> $("emailsCSV").click());
+
+$("emailsCSV").addEventListener("change", async (e)=>{
+  const input = e.target;
+  const f = input.files && input.files[0];
+  if (!f) return;
+
+  if (!/\.csv$/i.test(f.name)) {
+    alert("Please choose a .csv file");
+    input.value = "";
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append("file", f);
+
+  try {
+    const r = await fetch(`${API}/api/underwrite/emails-book/upload`, { method:"POST", body: fd });
+
+    // Be tolerant to non-JSON errors
+    let j = {};
+    const ct = (r.headers.get("content-type") || "").toLowerCase();
+    if (ct.includes("application/json")) {
+      j = await r.json().catch(()=> ({}));
+    } else {
+      const t = await r.text().catch(()=> "");
+      try { j = JSON.parse(t); } catch { j = { raw: t }; }
+    }
+
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+
+    // ✅ use the parsed object (j), not "resp"
+    const n = Number(j.count ?? 0);
+    const fileName = j.filename || f.name || "your CSV";
+    $("stmtStatus").textContent = `Loaded ${n} funder contact${n===1?"":"s"} from ${fileName}.`;
+    alert(`Loaded ${n} funder contact${n===1?"":"s"} from ${fileName}.`);
+
+    // Optional: refresh any “book status” UI if you have it
+    if (typeof refreshEmailsBookStatus === "function") refreshEmailsBookStatus();
+  } catch (err) {
+    alert(err.message || "Upload failed");
+  } finally {
+    input.value = "";
+  }
+});
+
+
+  // Call once on load
+  refreshEmailsBookStatus();
+  </script>
+  <script>
+const $k = (id) => document.getElementById(id);
+
+// Local state
+let DEALS = [];
+let FILTERED = [];
+let PAGE = 1;
+let PAGE_SIZE = 25;
+let _searchTimer = null;
+
+function normalize(s){ return (s ?? "").toString().toLowerCase(); }
+
+function applyFilterAndRender(){
+  const tbody = $("dealsTbody");
+  const pageInfoEl = $("pageInfo");
+  if (!tbody || !pageInfoEl) return;
+
+  const q = normalize(($("dealSearch") || {}).value);
+  FILTERED = !q ? [...DEALS] : DEALS.filter(d => {
+    const id   = String(d.id ?? "");
+    const mode = normalize(d.mode);
+    const biz  = normalize(d.business_name || d.subject || "");
+    const from = normalize(d.sender_email || d.from || "");
+    return [id, mode, biz, from].join(" ").includes(q);
+  });
+
+  const total = FILTERED.length;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (PAGE > pages) PAGE = pages;
+
+  const start = (PAGE - 1) * PAGE_SIZE;
+  const end   = Math.min(start + PAGE_SIZE, total);
+  const slice = FILTERED.slice(start, end);
+
+  // Your existing renderer
+  renderDealsTable(slice);
+  if (typeof annotateDealsWithDecisionPills === "function") annotateDealsWithDecisionPills();
+
+  pageInfoEl.textContent = `${total ? (start + 1) : 0}–${end} of ${total} • Page ${PAGE}/${pages}`;
+  if ($("pagePrev")) $("pagePrev").disabled = PAGE <= 1;
+  if ($("pageNext")) $("pageNext").disabled = PAGE >= pages;
+}
+
+function setPageSize(n){
+  PAGE_SIZE = Number(n) || 25;
+  PAGE = 1;
+  applyFilterAndRender();
+}
+
+function initDashboardPager(){
+  const searchEl = $("dealSearch");
+  const prevEl   = $("pagePrev");
+  const nextEl   = $("pageNext");
+  const sizeEl   = $("pageSize");
+
+  if (searchEl) {
+    searchEl.addEventListener("input", () => {
+      clearTimeout(_searchTimer);
+      _searchTimer = setTimeout(() => { PAGE = 1; applyFilterAndRender(); }, 150);
+    });
+  }
+  if (prevEl) prevEl.addEventListener("click", () => { if (PAGE > 1) { PAGE--; applyFilterAndRender(); } });
+  if (nextEl) nextEl.addEventListener("click", () => { PAGE++; applyFilterAndRender(); });
+  if (sizeEl) sizeEl.addEventListener("change", (e) => setPageSize(e.target.value));
+}
+
+// Patch loadDeals to populate state and render with pager
+const _orig_loadDeals = window.loadDeals;
+window.loadDeals = async function patchedLoadDeals(){
+  const tbody = $("dealsTbody");
+  const empty = $("dealsEmpty");
+  const summary = $("dashSummary");
+  if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
+  if (empty) empty.classList.add("hidden");
+
+  try {
+    const r = await fetch(`${API}/api/underwrite/deals`);
+    const data = await r.json();
+    DEALS = Array.isArray(data.deals) ? data.deals : [];
+
+    if (summary) {
+      const total = DEALS.length;
+      const sent = DEALS.reduce((a, d) => a + (Number(d.sent_count ?? 0)), 0);
+      const err  = DEALS.reduce((a, d) => a + (Number(d.error_count ?? 0)), 0);
+      const skip = DEALS.reduce((a, d) => a + (Number(d.skipped_count ?? 0)), 0);
+      summary.textContent = `${total} deal${total===1?"":"s"} • sent ${sent}, errors ${err}, skipped ${skip}`;
+    }
+
+    PAGE = 1;
+    initDashboardPager();   // idempotent
+    applyFilterAndRender();
+
+    if (!DEALS.length && empty) empty.classList.remove("hidden");
+  } catch (e) {
+    if (tbody) tbody.innerHTML = "";
+    if (empty) empty.classList.remove("hidden");
+    if (summary) summary.textContent = "Failed to load deals.";
+  }
+};
+
+// Ensure it runs on first visit, same as your original flow
+document.addEventListener("DOMContentLoaded", () => {
+  if (typeof _orig_loadDeals === "function") {
+    // If someone else calls loadDeals later (tab switch), our patch handles it.
+  } else {
+    // If no previous binding, call now.
+    window.loadDeals();
+  }
+});
+</script>
+<script>
+(async function requireAuth(){
+  try {
+    const res = await fetch('/api/auth/user/status', { credentials: 'include' }); // <- send cookies
+    const j = await res.json();
+    const isAuthed =
+      j && (j.authenticated || j.authorized || j.logged_in || j.loggedIn) &&
+      (j.user?.email || j.email);
+
+    if (!isAuthed) {
+      const next = encodeURIComponent(location.pathname + location.search);
+      location.href = `/login.html?expired=1&next=${next}`;
+      return;
+    }
+    // continue rendering…
+  } catch (e) {
+    const next = encodeURIComponent(location.pathname + location.search);
+    location.href = `/login.html?expired=1&next=${next}`;
+  }
+})();
+
+async function loadLeads() {
+  const el = $("leads");
+  el.innerHTML = "Loading...";
+  try {
+    const r = await fetch(`/api/underwrite/leads?limit=100`, { credentials: "include" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    el.innerHTML = renderLeadsTable(data.leads || []);
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = `<div class="error">Failed to load leads.</div>`;
+  }
+}
+
+function renderLeadsTable(rows) {
+  if (!rows.length) return `<div class="muted">No leads yet.</div>`;
+  const esc = s => String(s ?? "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+
+  const parsePayload = (v) => {
+    if (!v) return {};
+    if (typeof v === "object") return v;
+    try { return JSON.parse(v); } catch { return {}; }
+  };
+
+  // pick the first non-empty value from row or payload, trying many aliases
+  const pick = (r, p, candidates) => {
+    for (const k of candidates) {
+      // support dot paths like "owner.0.dob" (simple)
+      const fromRow = k.split('.').reduce((o, part) => (o && o[part] != null ? o[part] : undefined), r);
+      if (fromRow != null && String(fromRow).trim() !== "") return fromRow;
+
+      const fromPayload = k.split('.').reduce((o, part) => (o && o[part] != null ? o[part] : undefined), p);
+      if (fromPayload != null && String(fromPayload).trim() !== "") return fromPayload;
+    }
+    return "";
+  };
+
+  const fmtMoney = v => {
+    const n = Number(v);
+    if (!isFinite(n)) return esc(v ?? "");
+    return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  };
+
+  const fmtDate = d => {
+    if (!d) return "";
+    const t = new Date(d);
+    return isNaN(t) ? esc(d) : t.toLocaleString();
+  };
+
+  const fmtPayloadPreview = pObj => {
+    try {
+      const str = JSON.stringify(pObj ?? {}, null, 0);
+      return esc(str.length > 120 ? str.slice(0, 120) + "..." : str);
+    } catch {
+      return esc(String(pObj));
+    }
+  };
+
+  const buildAddress = (r, p) => {
+    // accept multiple shapes + a preformatted single-line
+    const single = pick(r, p, [
+      "company_address", "companyAddress", "company_address1", "companyAddress1"
+    ]);
+    const address1 = pick(r, p, ["company_address1","companyAddress1","company_address"]);
+    const address2 = pick(r, p, ["company_address2","companyAddress2"]);
+    const city     = pick(r, p, ["company_city","companyCity"]);
+    const state    = pick(r, p, ["company_state","companyState"]);
+    const zip      = pick(r, p, ["company_zip","companyZip"]);
+    const country  = pick(r, p, ["company_country","companyCountry"]);
+
+    const line1 = [address1, address2].filter(Boolean).join(" ");
+    const line2 = [city, state, zip].filter(Boolean).join(", ");
+    const parts = [line1 || single, line2, country].filter(s => s && String(s).trim());
+    return esc(parts.join(" · "));
+  };
+
+  // --- diagnostics on the first row ---
+  (function debugFirst() {
+    const r0 = rows[0];
+    const p0 = parsePayload(r0?.payload);
+    console.debug("[renderLeadsTable] first row keys:", Object.keys(r0 || {}));
+    console.debug("[renderLeadsTable] typeof payload:", typeof r0?.payload, r0?.payload);
+    console.debug("[renderLeadsTable] parsed payload sample:", p0);
+
+    console.debug("[renderLeadsTable] business name guess:",
+      pick(r0, p0, ["business_legal_name","business_name","businessName","business_dba","businessDBA","company_name","companyName"]));
+    console.debug("[renderLeadsTable] email guess:",
+      pick(r0, p0, ["email","owner_0_email","contact_email"]));
+    console.debug("[renderLeadsTable] owner dob guess:",
+      pick(r0, p0, ["owner_0_dob","owner.dob","dob"]));
+    console.debug("[renderLeadsTable] address guess:",
+      buildAddress(r0, p0));
+  })();
+
+  const rowsHtml = rows.map(r => {
+    const p = parsePayload(r.payload);
+
+    // columns (VERY permissive aliases)
+    const business = pick(r, p, ["business_legal_name","business_name","businessName","business_dba","businessDBA","company_name","companyName"]);
+    const email    = pick(r, p, ["email","owner_0_email","contact_email"]);
+    const phone    = pick(r, p, ["business_phone","phone","owner_0_mobile"]);
+    const ownerDobRaw = pick(r, p, ["owner_0_dob","owner.dob","dob"]);
+    const ownerDob = ownerDobRaw ? fmtDate(ownerDobRaw) : "";
+
+    const requested = pick(r, p, ["requested_amount","loan_requested","amount_requested"]);
+
+    return `
+      <tr>
+        <td>${esc(r.id)}</td>
+        <td>${esc(business)}</td>
+        <td>${esc(r.industry ?? p.industry ?? "")}</td>
+        <td>${esc(
+          Array.isArray(r.owners) ? r.owners.join(", ") :
+          (typeof r.owners === "object" && r.owners !== null ? Object.values(r.owners).join(", ") : (r.owners ?? ""))
+        )}</td>
+        <td>${fmtMoney(r.loan_amount ?? p.loan_amount)}</td>
+        <td>${fmtDate(r.created_at)}</td>
+
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Business</th>
+            <th>Industry</th>
+            <th>Owners</th>
+            <th>Requested</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  `;
+}
+</script>
+<script>
+function installLeadsExitPatches(){
+  const L = document.getElementById("leads");
+  if (!L) return;
+  const hideLeads = () => { L.classList.add("hidden"); L.innerHTML = ""; };
+
+  // Hide #leads when switching via the tiles
+  ["btnMCA","btnCCS","btnReverse","btnDashboard"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el._leadsExitAttached) {
+      el.addEventListener("click", hideLeads, {capture:true});
+      el._leadsExitAttached = true;
+    }
+  });
+
+  // Also hide #leads on programmatic mode changes
+  if (!window._leadsPatchedSetMode && typeof window.setMode === "function") {
+    window._leadsPatchedSetMode = true;
+    const orig = window.setMode;
+    window.setMode = function(mode){
+      if (mode !== "LEADS") hideLeads();
+      return orig.apply(this, arguments);
+    };
+  }
+}
+// ---- Wrapper (server-side via wrappers.py) ----
+// Expects your backend to expose: POST `${API}/api/wrap`
+//   FormData fields:
+//     file: the original PDF (File)
+//     deal_id: string/int (optional if not created yet -> use "0")
+//     funder_name: optional (e.g. "UploadStage")
+//     recipient_email: optional (e.g. current Gmail, or "pending@upload")
+//     mode: optional ("MCA" | "CCS" | "REV") for your logs
+// Returns: the wrapped PDF as a Blob (Content-Type: application/pdf)
+//         OR JSON { url } we can refetch; we handle both.
+async function wrapPDFViaServer(file, {
+  dealId = (window.RESEND_CTX?.dealId ?? "0"),
+  funderName = "UploadStage",
+  recipientEmail = (window.gmailEmail || "pending@upload"),
+} = {}) {
+  const fd = new FormData();
+  fd.append("file", file, file.name);
+  fd.append("deal_id", String(dealId));
+  fd.append("lender", funderName);
+  fd.append("recipient_email", recipientEmail);
+
+  const r = await fetch(`/api//underwrite/wrap?mode=json`, { method: "POST", body: fd, credentials: "same-origin" });
+
+  // If you want the PDF Blob directly instead of JSON, switch to `?mode=pdf` and stream it.
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = j.detail || j.error || `HTTP ${r.status}`;
+    throw new Error(`Wrapper failed: ${msg}`);
+  }
+
+  // Option 1: fetch the wrapped file path that server wrote, then return it as a File
+  if (j.wrapper_path) {
+    const rr = await fetch(j.wrapper_path, { cache: "no-store", credentials: "same-origin" }).catch(()=>null);
+    if (rr && rr.ok && (rr.headers.get("content-type")||"").includes("pdf")) {
+      const blob = await rr.blob();
+      return new File([blob], file.name.replace(/\.pdf$/i, ".wrapper.pdf"), { type: "application/pdf" });
+    }
+  }
+  // Option 2 fallback: still return original so UX continues
+  return file;
+}
+
+// Small UI helper to add a “wrapped” pill
+
+function markWrapped(html){ return `${html} <span class="wrapped-badge">wrapped</span>`; }
+
+async function prepareApplicationFile(){
+  const box = $("appPreview");
+  const input = $("application");
+  const f = input.files[0];
+  if (!f) { box.innerHTML = ""; return; }
+
+  box.innerHTML = `<strong>Selected:</strong> ${f.name} <span class="muted">(${formatBytes(f.size)})</span> <span class="muted">· wrapping…</span>`;
+  try {
+    const wrapped = await wrapPDFViaServer(f);
+    const dt = new DataTransfer(); dt.items.add(wrapped); input.files = dt.files;
+    box.innerHTML = markWrapped(`<strong>Selected:</strong> ${wrapped.name} <span class="muted">(${formatBytes(wrapped.size)})</span>`);
+  } catch (e) {
+    console.warn("wrap failed; keeping original", e);
+    box.innerHTML = `<strong>Selected:</strong> ${f.name} <span class="muted">(${formatBytes(f.size)})</span>`;
+  }
+}
+
+async function prepareStatementsFiles(){
+  const box = $("stmtsPreview");
+  const input = $("statements");
+  const files = Array.from(input.files||[]);
+  if (!files.length) { box.innerHTML = ""; return; }
+
+  box.innerHTML = `<strong>${files.length} PDF${files.length>1?"s":""}</strong> <span class="muted">· wrapping…</span>`;
+  const wrapped = [];
+  for (const f of files) {
+    try {
+      wrapped.push(await wrapPDFViaServer(f));
+    } catch (e) {
+      console.warn("wrap failed; keeping original", e);
+      wrapped.push(f);
+    }
+  }
+  try { const dt=new DataTransfer(); wrapped.forEach(f=>dt.items.add(f)); input.files = dt.files; } catch {}
+  const total = wrapped.reduce((a,f)=>a+(f.size||0),0);
+  box.innerHTML = markWrapped(`<strong>${wrapped.length} PDF${wrapped.length>1?"s":""}:</strong> ${formatBytes(total)}`) +
+    `<ul>${wrapped.map(f=>`<li>${f.name} <span class="muted">(${formatBytes(f.size)})</span></li>`).join("")}</ul>`;
+}
+
+</script>
+<script>
+  // --- tiny helpers ---
+  const l = (id) => document.getElementById(id);
+
+ async function fileToBase64(file) {
+  const buf = await file.arrayBuffer();
+  let bin = '';
+  const bytes = new Uint8Array(buf);
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  // raw base64 (no data: prefix)
+  return btoa(bin);
+}
+async function wrapPdfForLender(originalFile, lenderName, opts = {}) {
+  // 1) Skip if already wrapped
+  if (/\.(?:wrapped)\.pdf$/i.test(originalFile.name) || /-\s*wrapped\.pdf$/i.test(originalFile.name)) {
+    return originalFile;
+  }
+
+  // 2) Build form with DEFAULT watermark/footer (so every wrap has them)
+  const fd = new FormData();
+  fd.append("file", originalFile, originalFile.name);
+  fd.append("lender", lenderName || "");
+  fd.append("force_watermark_text", opts.force_watermark_text || "SENT VIA PATHWAY CATALYST");
+  fd.append("force_footer_template", opts.force_footer_template || "Submitted to {{lender}} by {{user}} ({{email}}) • Deal #{{deal}}");
+  if (opts.deal_id) fd.append("deal_id", String(opts.deal_id));
+  if (opts.recipient_email) fd.append("recipient_email", opts.recipient_email);
+
+  const res = await fetch(`/api/underwrite/wrap`, { method: "POST", body: fd, credentials: "same-origin" });
+
+  // 3) Robust error handling: if not a PDF, surface server message
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`wrap failed (${res.status}): ${text || "unknown error"}`);
+  }
+  const ct = res.headers.get("content-type") || "";
+  if (!ct.toLowerCase().includes("application/pdf")) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`wrap returned non-PDF (${ct}): ${text.slice(0, 200)}`);
+  }
+
+  // 4) Normalize filename to *.wrapped.pdf (matches backend checks)
+  const base = originalFile.name.replace(/\.pdf$/i, "");
+  const safeLender = (lenderName || "").replace(/[\/\\:*?"<>|]+/g, "_").trim();
+  const outName = safeLender ? `${base}.${safeLender}.wrapped.pdf` : `${base}.wrapped.pdf`;
+
+  const blob = await res.blob();
+  return new File([blob], outName, { type: "application/pdf" });
+}
+
+async function buildPerLenderAttachments(lenders) {
+  const appFile   = document.getElementById("application")?.files?.[0] || null;
+  const stmtFiles = Array.from(document.getElementById("statements")?.files || []);
+  const allFiles  = [ ...(appFile ? [appFile] : []), ...stmtFiles ];
+
+  if (!allFiles.length) throw new Error("No files selected to wrap.");
+
+  const perMap = {};
+  for (let i = 0; i < lenders.length; i++) {
+    const lender = lenders[i];
+    document.getElementById("sendStatus").textContent = `Preparing ${i+1}/${lenders.length}: ${lender}…`;
+    const list = [];
+      for (const f of allFiles){
+      let out = f;
+      try{
+        out = await wrapPdfForLender(f, lender); // WRAP WITH WATERMARK+FOOTER
+      }catch(e){
+        console.warn(`Watermark failed for ${f.name} (${lender}); aborting.`, e);
+        throw e; // do NOT send originals
+      }
+      const b64 = await fileToBase64(out);
+      list.push({ name: out.name, mime: "application/pdf", data: b64 }); // use wrapped name
+    }
+    // ⬆️ END replacement
+
+    perMap[lender] = list;
+  }
+  return perMap;
+}
+  // EXAMPLE: integrate into your existing send flow
+  // If you already have a function that gathers lenders and sends emails,
+  // call buildPerLenderAttachments(lenders) right before sending:
+  //
+  // async function onClickSend() {
+  //   const lenders = getSelectedLendersFromUI(); // e.g., ["BlueRiver", "Foxtrot Bank"]
+  //   const perLenderAttachments = await buildPerLenderAttachments(lenders);
+  //   await actuallySendEmails({ lenders, perLenderAttachments });
+  // }
+</script>
+<script>
+  const m = (id) => document.getElementById(id);
+
+  $("wrapTestBtn").addEventListener("click", async () => {
+    const f = (document.getElementById("application")?.files?.[0])
+          || (document.getElementById("statements")?.files?.[0]);
+    if (!f) { alert("Pick an Application or Statement PDF first."); return; }
+
+    const lender = (window.getSelectedLendersFromUI?.()[0]) || "Demo Lender";
+    const dealId = (window.RESEND_CTX && window.RESEND_CTX.dealId) || 0;
+    const recipient = (window.gmailEmail || window.userEmail || "");
+
+    const fd = new FormData();
+    fd.append("file", f, f.name);
+    fd.append("lender", lender);
+    fd.append("recipient_email", recipient);
+    fd.append("deal_id", String(dealId));
+    // force visible overlay
+    fd.append("force_watermark_text", `${lender} • CONFIDENTIAL`);
+    fd.append("force_footer_template", "For: {funder} • {recipient} • Deal: {deal} • Track: {fp}");
+
+    const res = await fetch("/api/underwrite/wrap?mode=json", { method: "POST", body: fd, credentials: "same-origin" });
+    const out = $("wrapDiag");
+    out.style.display = "block";
+    if (!res.ok) {
+      out.textContent = "Wrap failed: " + (await res.text());
+      return;
+    }
+    const js = await res.json();
+    out.textContent = JSON.stringify(js, null, 2);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+       {% if search %}
+       <title>pdfs: {{article_dir}}/{{search}}</title>
+       {% else %}
+       <title>pdfs: {{article_dir}}</title>
+       {% endif %}
+    <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='style.css')}}"/>
+    <link rel="shortcut icon"  href="{{url_for('static', filename='favicon.ico')}}"/>
+  </head>
+  <body>
+    <div class="pdfs">
+       <div class="head"><a href="/">{{article_dir}}</a></div>
+       <form action="/search" method="get">
+           <input class="search" type="text" name="q">
+           <select class="search" name="t">
+               <option value="text">Full text</option>
+               <option value="author">Author</option>
+               <option value="title">Title</option>
+               <option value="tag">Tag</option>
+           </select>
+           <input class="button" type="submit" value="Search">
+       </form>
+       {% if tags %}
+       <div class="tagBar">{{tags|safe}}</div>
+       {% endif %}
+       {% if entries %}
+       {% for e in entries %}
+       <div class='entry'>
+           <div class='key'>{{e.key}}</div>
+           <div class='timestamp'>{{e.importDate}}</div>
+           <div class='reference'>
+               {{e.reference|safe}}
+           </div>
+           {% if e.attachments %}
+           <div class='attLabel'> </div>
+           <div class='attachments'>
+              {% for a in e.attachments %}
+              <a class="attachment" target="_blank" href="/attachment/{{a.file}}">{{a.name}}</a>{% if not loop.last %},{% endif %}
+              {% endfor %}
+           </div>
+           {% endif %}
+           {% if e.tags %}
+           <div class='tagLabel'> </div>
+           <div class='tags'> 
+               {% for t in e.tags %}
+               <a class="tags" href="/tag/{{t}}">{{t}}</a>
+               {% endfor %}
+           </div>
+           {% endif %}
+           <div class='links'>
+               <a class="pdf" target="_blank" href="/{{e.key}}.pdf"></a>
+               <a class="bib" target="_blank" href="/{{e.key}}.bib"></a>
+           </div>
+       </div>
+       {% if e.searchTxt %}
+       <div class='searchResults'>
+       {% for frag in e.searchTxt.frags %}
+       <div class='fragment'>
+           <span class='fragmentPage'>{{frag.page}}</span> {{frag.frag|safe}}
+       </div>
+       {% endfor %}
+       </div>
+       {% endif %}
+       {% endfor %}
+       {% else %}
+            Nothing found
+       {% endif %}
+    </div>
+  </body>
+</html>

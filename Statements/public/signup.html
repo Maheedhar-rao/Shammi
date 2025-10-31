@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>CROC – Sign up</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root{--bg:#0f172a;--card:#ffffff;--text:#0b1324;--muted:#6b7280;--brand:#2563eb;--line:#e5e7eb}
+    *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#0f172a,#111827)}
+    .card{width:100%;max-width:420px;background:var(--card);border-radius:14px;border:1px solid var(--line);padding:22px;box-shadow:0 20px 40px rgba(0,0,0,.25)}
+    h1{margin:0 0 6px;font-size:20px}
+    p{margin:0 0 16px;color:var(--muted);font-size:13px}
+    label{display:block;margin:10px 0 6px;font-size:13px;color:#374151}
+    input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:10px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .actions{display:flex;gap:8px;margin-top:14px}
+    button{flex:1;padding:10px;border:0;border-radius:10px;background:var(--brand);color:#fff;cursor:pointer}
+    .ghost{background:#e5e7eb;color:#111}
+    .note{margin-top:10px;font-size:12px;color:var(--muted)}
+    .err{color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:8px;margin-top:10px;display:none}
+    .ok{color:#065f46;background:#dcfce7;border:1px solid #bbf7d0;border-radius:8px;padding:8px;margin-top:10px;display:none}
+    .pw-wrap{position:relative}
+    .pw-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;color:#111;background:#eef2ff;border:1px solid #c7d2fe;border-radius:999px;padding:3px 10px;cursor:pointer;user-select:none}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Welcome to CROC</h1>
+    <p>Create your account to continue.</p>
+
+    <div class="grid">
+      <div>
+        <label>First name</label>
+        <input id="first_name" type="text" placeholder="Jane" autocomplete="given-name"/>
+      </div>
+      <div>
+        <label>Last name</label>
+        <input id="last_name" type="text" placeholder="Doe" autocomplete="family-name"/>
+      </div>
+    </div>
+
+    <label>Mobile</label>
+    <input id="mobile" type="tel" placeholder="+1 555 123 4567" autocomplete="tel"/>
+
+    <label>Email</label>
+    <input id="email" type="email" placeholder="email@company.com" autocomplete="username"/>
+
+    <label>Password</label>
+    <div class="pw-wrap">
+      <input id="password" type="password" placeholder="Minimum 8 characters" autocomplete="new-password"/>
+      <span id="pwToggle" class="pw-toggle" aria-label="Show password">Show</span>
+    </div>
+
+    <div class="actions">
+      <button id="btnLogin" type="button" class="ghost">Sign in</button>
+      <button id="btnSignup" type="button">Sign up</button>
+    </div>
+
+    <div id="ok" class="ok">Account created. Check your email to confirm, then sign in.</div>
+    <div id="err" class="err">Something went wrong.</div>
+
+    <p class="note">After signing up, connect Gmail from your dashboard.</p>
+  </div>
+
+  <script>
+    // Keep existing IDs/events so external scripts work.
+    const $ = (id)=>document.getElementById(id);
+    const show=(el,msg)=>{ if(msg) el.textContent=msg; el.style.display="block"; };
+    const hide=(el)=>{ el.style.display="none"; };
+    const lock=(on)=>{ $("btnLogin").disabled=on; $("btnSignup").disabled=on; };
+
+    $("pwToggle").onclick = () => {
+      const inp=$("password"); const next=inp.type==="password"?"text":"password";
+      inp.type = next; $("pwToggle").textContent = next==="password"?"Show":"Hide";
+    };
+    $("btnLogin").onclick = ()=> location.href="/login.html?next/underwrite.html";
+
+    // Call your Flask BFF -> Supabase (no keys in browser)
+    async function call(url, payload){
+      const r = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload||{}) });
+      const ct=(r.headers.get("content-type")||"").toLowerCase();
+      const data = ct.includes("application/json") ? await r.json().catch(()=>({})) : {};
+      if(!r.ok) throw new Error((data && data.error) || `HTTP ${r.status}`);
+      return data;
+    }
+
+    $("btnSignup").onclick = async () => {
+      hide($("ok")); hide($("err")); lock(true);
+      try{
+        const email = $("email").value.trim();
+        const password = $("password").value;
+        const first = $("first_name").value.trim();
+        const last  = $("last_name").value.trim();
+        const mobile= $("mobile").value.trim();
+
+        if (!first || !last) throw new Error("Please provide first and last name.");
+        if (!email) throw new Error("Enter your email.");
+        if (!password || password.length < 8) throw new Error("Password must be at least 8 characters.");
+
+        // Backend should proxy to Supabase /auth/v1/signup and upsert profiles
+        await call("/api/auth/user/signup", {
+          email, password, profile: { full_name: `${first} ${last}`.trim(), mobile }
+        });
+
+        show($("ok"), "Account created. Check your email to confirm, then sign in.");
+        setTimeout(() => location.reload(), 800);
+      }catch(e){
+        show($("err"), e.message || "Signup failed");
+      }finally{
+        lock(false);
+      }
+    };
+  </script>
+</body>
+</html>

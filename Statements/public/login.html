@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>CROC – Sign in</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root{--bg:#0f172a;--card:#ffffff;--text:#0b1324;--muted:#6b7280;--brand:#2563eb;--line:#e5e7eb}
+    *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#0f172a,#111827)}
+    .card{width:100%;max-width:460px;background:var(--card);border-radius:14px;border:1px solid var(--line);padding:22px;box-shadow:0 20px 40px rgba(0,0,0,.25)}
+    h1{margin:0 0 6px;font-size:20px}
+    p{margin:0 0 16px;color:var(--muted);font-size:13px}
+    label{display:block;margin:10px 0 6px;font-size:13px;color:#374151}
+    input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:10px}
+    .actions{display:flex;gap:8px;margin-top:14px}
+    button{flex:1;padding:10px;border:0;border-radius:10px;background:var(--brand);color:#fff;cursor:pointer}
+    .ghost{background:#e5e7eb;color:#111}
+    .link{color:#2563eb;text-decoration:none;font-size:12px}
+    .row{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+    .msg{margin-top:10px;font-size:12px;display:none;border-radius:10px;padding:10px}
+    .ok{display:block;color:#065f46;background:#dcfce7;border:1px solid #bbf7d0}
+    .err{display:block;color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca}
+    .pw{position:relative}
+    .pw-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;color:#374151;cursor:pointer;background:#eef2ff;border:1px solid #c7d2fe;border-radius:999px;padding:2px 8px}
+    .hidden{display:none}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Welcome to CROC</h1>
+
+    <!-- VIEW: Sign in -->
+    <div id="viewSignIn">
+      <label>Email</label>
+      <input id="inEmail" type="email" placeholder="user@company.com" autocomplete="username"/>
+
+      <label>Password</label>
+      <div class="pw">
+        <input id="inPassword" type="password" placeholder="Minimum 8 characters" autocomplete="current-password"/>
+        <span id="inPwToggle" class="pw-toggle" role="button" tabindex="0">Show</span>
+      </div>
+
+      <div class="row">
+        <a id="linkForgot" class="link" href="#">Forgot password?</a>
+        <a id="linkSignup" class="link" href="/signup.html">Create an account</a>
+      </div>
+
+      <div class="actions">
+        <button id="btnLogin" type="button">Sign in</button>
+      </div>
+
+      <div id="noteIn" class="msg"></div>
+    </div>
+
+    <!-- VIEW: Change password (email+old → new) -->
+    <div id="viewChange" class="hidden">
+      <p id="changeHint" style="margin-top:0;">Change your password with your current one, or use a reset link.</p>
+
+      <label>Account email</label>
+      <input id="chEmail" type="email" placeholder="you@company.com" autocomplete="username"/>
+
+      <label id="lblOld">Current password</label>
+      <div class="pw">
+        <input id="chOld" type="password" placeholder="Your current password" autocomplete="current-password"/>
+        <span id="chOldToggle" class="pw-toggle" role="button" tabindex="0">Show</span>
+      </div>
+
+      <div class="grid">
+        <div>
+          <label>New password</label>
+          <div class="pw">
+            <input id="chNew" type="password" placeholder="At least 8 characters" autocomplete="new-password"/>
+            <span id="chNewToggle" class="pw-toggle" role="button" tabindex="0">Show</span>
+          </div>
+        </div>
+        <div>
+          <label>Confirm new password</label>
+          <div class="pw">
+            <input id="chNew2" type="password" placeholder="Repeat new password" autocomplete="new-password"/>
+            <span id="chNew2Toggle" class="pw-toggle" role="button" tabindex="0">Show</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="btnDoChange" type="button">Change password</button>
+        <button id="btnBack" type="button" class="ghost">Back</button>
+      </div>
+
+      <div id="noteChange" class="msg"></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    // helpers (keep names to avoid breaking hooks)
+    function showMsg(el,msg,ok=true){ el.className="msg "+(ok?"ok":"err"); el.textContent=msg; el.style.display="block"; }
+    function hideMsg(el){ el.style.display="none"; el.textContent=""; el.className="msg"; }
+    function togglePw(input, btn){
+      const go=()=>{ const t=input.type==="password"?"text":"password"; input.type=t; btn.textContent=(t==="password"?"Show":"Hide"); };
+      btn.addEventListener("click", go); btn.addEventListener("keydown", (e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); }});
+    }
+    function swap(view){
+      ["viewSignIn","viewChange"].forEach(id => $(id).classList.add("hidden"));
+      $(view).classList.remove("hidden");
+      ["noteIn","noteChange"].forEach(id=>hideMsg($(id)));
+    }
+
+    togglePw($("inPassword"), $("inPwToggle"));
+    [["chOld","chOldToggle"],["chNew","chNewToggle"],["chNew2","chNew2Toggle"]].forEach(([i,t])=>togglePw($(i),$(t)));
+
+    // BFF calls – your Flask should proxy these to Supabase:
+    //  /api/auth/user/login           -> GoTrue password grant
+    //  /api/auth/user/reset           -> trigger reset email (optional)
+    //  /api/auth/user/change-password -> update password (needs session or recovery)
+    async function call(url, payload){
+      const r = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload||{}) });
+      const ct=(r.headers.get("content-type")||"").toLowerCase();
+      const data = ct.includes("application/json") ? await r.json().catch(()=>({})) : {};
+      if(!r.ok) throw new Error((data && data.error) || `HTTP ${r.status}`);
+      return data;
+    }
+     function afterAuthSuccess(msg){
+    const next = new URLSearchParams(location.search).get("next") || "/underwrite.html";
+    const el = document.getElementById("noteIn");
+    el.className = "msg ok";
+    el.textContent = msg || "Signed in. Redirecting…";
+    el.style.display = "block";
+    setTimeout(() => { location.href = next; }, 300);
+  }
+    
+    $("linkForgot").addEventListener("click", async (e)=>{
+      e.preventDefault();
+      // Optional: if you implement reset endpoint, call it here; otherwise show change view
+      const email = $("inEmail").value.trim();
+      if (email) { try{ await call("/api/auth/user/reset", { email }); showMsg($("noteIn"), "If your email exists, a reset link was sent.", true); }catch{} }
+      swap("viewChange");
+      $("chEmail").value = email;
+      $("chEmail").focus();
+    });
+
+    $("btnBack").addEventListener("click", ()=> swap("viewSignIn"));
+
+    $("btnLogin").addEventListener("click", async ()=>{
+      hideMsg($("noteIn"));
+      try{
+        const email = $("inEmail").value.trim();
+        const password = $("inPassword").value;
+        if(!email || !password) throw new Error("Enter email and password.");
+        await call("/api/auth/user/login", { email, password });
+        afterAuthSuccess("Signed in. Redirecting…");
+      }catch(e){
+        showMsg($("noteIn"), e.message || "Login failed", false);
+      }
+    });
+
+    $("btnDoChange").addEventListener("click", async ()=>{
+      hideMsg($("noteChange"));
+      try{
+        const email = $("chEmail").value.trim();
+        const old_password = $("chOld").value;
+        const p1 = $("chNew").value, p2 = $("chNew2").value;
+        if (!email) throw new Error("Enter your account email.");
+        if (!p1 || p1.length < 8) throw new Error("New password must be at least 8 characters.");
+        if (p1 !== p2) throw new Error("Passwords do not match.");
+
+        await call("/api/auth/user/change-password", { email, old_password, new_password: p1 });
+        showMsg($("noteChange"), "Password updated. You can now sign in.", true);
+        setTimeout(()=> { swap("viewSignIn"); }, 700);
+      }catch(e){
+        showMsg($("noteChange"), e.message || "Could not change password", false);
+      }
+    });
+
+    // If Supabase sent you here with #type=recovery, you can hide the "current password" UI:
+    (function handleRecovery(){
+      const qs = new URLSearchParams(location.hash.replace(/^#/,""));
+      if (qs.get("type") === "recovery"){
+        swap("viewChange");
+        $("changeHint").textContent = "You opened a reset link. Set a new password below.";
+        $("lblOld").style.display = "none"; $("chOld").parentElement.style.display = "none";
+      }
+    })();
+
+    // Submit on Enter from email or password input
+["inEmail","inPassword"].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      document.getElementById("btnLogin").click();
+    }
+  });
+});
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "token": "ya29.a0ATi6K2sebd9DT5VGFO5uBLKzQ0u0-5aBWi3fuSLpbmgQYatYaC3NCZ_5xh4W3SU5mXxzjg5nZC8ZHJOMqaQ9HNjXT_wKzezvbCOawCa63Q73rrLVU0umZEzqYoF9B3y65D0niPEyBAJ8TlusHgMA7EqHKsrB3uYaTOqNZeCEpm9jlocCSviF52laXt41rgsmp36DCSwaCgYKAegSARASFQHGX2MiowWGy_gBRVnhX0YncWdiYA0206",
+  "refresh_token": "1//05m7vLlrNNnXCCgYIARAAGAUSNwF-L9Ir3aKyFQITqgX5KRFQYMmfGEl4dGpOdoWLGWAEmQKWd45q2RmizQw5zVS_B6M0kngTE-0",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "client_id": "682245427047-1rdvsafbbr26fu46dr9s53bec9kq3sif.apps.googleusercontent.com",
+  "client_secret": "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",
+  "scopes": [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.readonly"
+  ],
+  "universe_domain": "googleapis.com",
+  "account": "",
+  "expiry": "2025-10-30T21:38:57.797201Z",
+  "email": "team@pathwaycatalyst.com"
+}
