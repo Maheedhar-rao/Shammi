@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Feedback Hub Diagnostic</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #dcdcdc; }
+    .log { padding: 8px; margin: 4px 0; border-radius: 4px; }
+    .success { background: #065f46; color: #dcfce7; }
+    .error { background: #7f1d1d; color: #fee2e2; }
+    .info { background: #1e40af; color: #dbeafe; }
+    button { padding: 12px 24px; font-size: 16px; margin: 10px 5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Feedback Hub Diagnostic</h1>
+  <div id="output"></div>
+
+  <button onclick="runTest()">Run Diagnostic</button>
+  <button onclick="testManualOpen()">Manually Open Hub</button>
+
+  <script type="module">
+    const output = document.getElementById('output');
+
+    function log(msg, type = 'info') {
+      const div = document.createElement('div');
+      div.className = `log ${type}`;
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      output.appendChild(div);
+      console.log(msg);
+    }
+
+    window.runTest = function() {
+      output.innerHTML = '';
+      log('Starting diagnostic...', 'info');
+
+      // Test 1: Check if hub element exists
+      const hub = document.getElementById('feedbackHub');
+      if (hub) {
+        log('✅ Hub element exists', 'success');
+        log(`Hub classes: ${hub.className}`, 'info');
+        log(`Hub display: ${hub.style.display || 'not set'}`, 'info');
+      } else {
+        log('❌ Hub element NOT FOUND', 'error');
+      }
+
+      // Test 2: Check if main.js loaded
+      log('Checking if main.js loaded...', 'info');
+      setTimeout(() => {
+        log('Attempting to import feedback-hub module...', 'info');
+
+        import('./js/components/feedback-hub.js')
+          .then(module => {
+            log('✅ feedback-hub.js loaded successfully', 'success');
+            log(`Exports: ${Object.keys(module).join(', ')}`, 'info');
+
+            // Store for manual test
+            window.feedbackHubModule = module;
+          })
+          .catch(err => {
+            log(`❌ Failed to load feedback-hub.js: ${err.message}`, 'error');
+            log(`Error stack: ${err.stack}`, 'error');
+          });
+      }, 100);
+
+      // Test 3: Check if dashboard loaded
+      setTimeout(() => {
+        log('Checking dashboard integration...', 'info');
+        import('./js/components/dashboard.js')
+          .then(module => {
+            log('✅ dashboard.js loaded successfully', 'success');
+          })
+          .catch(err => {
+            log(`❌ Failed to load dashboard.js: ${err.message}`, 'error');
+          });
+      }, 200);
+    };
+
+    window.testManualOpen = function() {
+      log('Attempting to manually open hub...', 'info');
+
+      if (window.feedbackHubModule && window.feedbackHubModule.openFeedbackHub) {
+        log('Calling openFeedbackHub(123)...', 'info');
+        window.feedbackHubModule.openFeedbackHub(123)
+          .then(() => log('✅ Hub opened successfully', 'success'))
+          .catch(err => log(`❌ Error opening hub: ${err.message}`, 'error'));
+      } else {
+        log('❌ feedbackHubModule not available', 'error');
+        log('Run diagnostic first to load the module', 'info');
+      }
+    };
+
+    // Auto-run on load
+    setTimeout(() => runTest(), 500);
+  </script>
+</body>
+</html>

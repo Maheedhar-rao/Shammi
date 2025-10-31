@@ -3,13 +3,20 @@ flask-cors
 gunicorn
 requests
 python-dotenv
+werkzeug
 PyPDF2
 pikepdf
+PyMuPDF>=1.23.0
 # PDF tooling
 reportlab
-pillow
+Pillow>=10.0.0
 pdfplumber
 pdfminer.six
+pdf2image
+pytesseract
+python-dateutil
+
+flask_login
 
 # Google APIs for auth + Gmail send
 google-auth
@@ -20,3 +27,5 @@ google-api-python-client
 # Supabase client
 supabase
 
+# AI
+openai

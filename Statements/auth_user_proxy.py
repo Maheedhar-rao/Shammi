@@ -61,6 +61,7 @@ def signup():
 
 @bp.post("/login")
 def login():
+    from flask import session
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip()
     password = body.get("password") or ""
@@ -81,9 +82,13 @@ def login():
     if not at or not rt:
         return jsonify({"ok": False, "error": "missing tokens"}), 500
 
+    # Set session for Flask's session-based auth checks
+    session["user_email"] = email
+
     resp = make_response(jsonify({"ok": True}))
     _set_auth_cookies(resp, at, rt)
     return resp
+
 
 @bp.post("/reset")
 def reset():
@@ -127,12 +132,17 @@ def change_password():
 
 @bp.post("/logout")
 def logout():
+    from flask import session
     at = request.cookies.get("sb-access-token")
     if at:
         try:
             requests.post(f"{AUTH_BASE}/logout", headers=_headers(at), timeout=10)
         except Exception:
             pass
+
+    # Clear Flask session
+    session.pop("user_email", None)
+
     resp = make_response(jsonify({"ok": True}))
     _clear_auth_cookies(resp)
     return resp

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Trace Analytics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #121832;
+      --muted: #94a3b8;
+      --text: #e6eefc;
+      --accent: #4f46e5;
+      --accent-2: #22c55e;
+      --danger: #ef4444;
+      --border: #24304d;
+    }
+    html,body {height:100%}
+    body {
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial;
+      background:linear-gradient(180deg,#0b1020 0%, #0a0f1f 100%); color:var(--text);
+    }
+    .wrap {max-width:1100px; margin:32px auto; padding:0 16px}
+    .row {display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end}
+    .card {
+      background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px;
+      box-shadow:0 8px 20px rgba(0,0,0,.25)
+    }
+    .toolbar {display:flex; gap:10px; align-items:center; margin-bottom:16px}
+    .toolbar .spacer {flex:1}
+    label {font-size:12px; color:var(--muted); display:block; margin-bottom:6px}
+    input[type="text"] {
+      background:#0e1530; color:var(--text); border:1px solid var(--border); border-radius:8px;
+      padding:10px 12px; min-width:260px; outline:none
+    }
+    button {
+      border:1px solid var(--border); background:#11193a; color:var(--text);
+      padding:10px 14px; border-radius:10px; cursor:pointer
+    }
+    button.primary {background:var(--accent); border-color:transparent}
+    button.success {background:var(--accent-2); border-color:transparent}
+    button.danger {background:var(--danger); border-color:transparent}
+    button:disabled {opacity:.6; cursor:not-allowed}
+
+    table {width:100%; border-collapse:collapse; font-size:14px}
+    th, td {padding:12px 10px; border-bottom:1px solid var(--border); text-align:left}
+    th {color:#aab6d3; font-weight:600}
+    td.small {color:var(--muted); font-size:12px}
+    .badge {display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#0f1735; border:1px solid var(--border)}
+    a {color:#9cc4ff; text-decoration:none}
+    a:hover {text-decoration:underline}
+
+    .modal {
+      position:fixed; inset:0; display:none; background:rgba(4,6,16,.65);
+      align-items:center; justify-content:center; padding:16px; z-index:20
+    }
+    .modal.open {display:flex}
+    .modal .panel {width:min(900px, 95vw)}
+    .grid {display:grid; grid-template-columns:repeat(12,1fr); gap:12px}
+    .col-12 {grid-column:span 12}
+    .col-6 {grid-column:span 6}
+    .right {text-align:right}
+    .muted {color:var(--muted)}
+    .note {font-size:12px; color:var(--muted); margin-top:6px}
+    .hidden {display:none}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="toolbar">
+      <div>
+        <div class="muted" style="font-size:13px">Trace Analytics</div>
+        <h2 style="margin:4px 0 0 0">Secure Document Views</h2>
+      </div>
+      <div class="spacer"></div>
+      <a href="underwrite.html"><button>Back to App</button></a>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="dealId">Deal ID</label>
+          <input id="dealId" type="text" placeholder="e.g. 123 or 8b5b9b97-...">
+        </div>
+        <div>
+          <button id="btnLoadDeal" class="primary">Load Deal Analytics</button>
+        </div>
+        <div>
+          <label for="trackingId">Tracking ID</label>
+          <input id="trackingId" type="text" placeholder="Paste a tracking_id to drill in">
+        </div>
+        <div>
+          <button id="btnLoadDoc">Open Document Timeline</button>
+        </div>
+        <div class="spacer"></div>
+        <div>
+          <button id="btnExport" class="success" disabled>Export CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="grid">
+        <div class="col-12">
+          <h3 style="margin:0 0 10px 0">Documents</h3>
+          <div class="note">Rows aggregate views for each recipient per tracking_id. Click “Timeline” to see raw events.</div>
+          <div id="docsEmpty" class="muted" style="padding:8px 0">No data loaded yet.</div>
+          <div id="docsWrap" class="hidden">
+            <table id="docsTable">
+              <thead>
+                <tr>
+                  <th>Recipient</th>
+                  <th>Tracking ID</th>
+                  <th>Views</th>
+                  <th>Unique</th>
+                  <th>First Viewed</th>
+                  <th>Last Viewed</th>
+                  <th>Link</th>
+                  <th class="right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="docsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Document timeline -->
+    <div id="modal" class="modal">
+      <div class="panel card">
+        <div class="row" style="margin-bottom:6px">
+          <h3 style="margin:0">View Timeline</h3>
+          <div class="spacer"></div>
+          <button id="closeModal">Close</button>
+        </div>
+        <div class="muted" id="docMeta" style="margin-bottom:8px"></div>
+        <div style="overflow:auto; max-height:60vh">
+          <table>
+            <thead>
+              <tr>
+                <th>Viewed At (UTC)</th>
+                <th>IP</th>
+                <th>User Agent</th>
+                <th>Fingerprint</th>
+              </tr>
+            </thead>
+            <tbody id="timelineBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Adjust if your API is on a different origin
+    const API = "";
+
+    const $ = (id) => document.getElementById(id);
+    const btnLoadDeal = $("btnLoadDeal");
+    const btnLoadDoc = $("btnLoadDoc");
+    const btnExport = $("btnExport");
+    const docsEmpty = $("docsEmpty");
+    const docsWrap = $("docsWrap");
+    const docsBody = $("docsBody");
+    const trackingIdInput = $("trackingId");
+    const dealIdInput = $("dealId");
+
+    let currentDealId = null;
+    let currentDocs = []; // cache of /analytics/deal/:id response.documents
+
+    function fmt(ts) {
+      if (!ts) return "";
+      try { return new Date(ts).toISOString().replace("T"," ").replace("Z",""); } catch { return ts; }
+    }
+
+    function toCSV(rows) {
+      if (!rows || !rows.length) return "";
+      const cols = Object.keys(rows[0]);
+      const esc = (v) => `"${String(v ?? "").replace(/"/g,'""')}"`;
+      return [cols.join(","), ...rows.map(r => cols.map(c => esc(r[c])).join(","))].join("\n");
+    }
+
+    async function loadDealAnalytics(dealId) {
+      docsBody.innerHTML = "";
+      docsWrap.classList.add("hidden");
+      docsEmpty.textContent = "Loading...";
+      docsEmpty.classList.remove("hidden");
+      btnExport.disabled = true;
+      try {
+        const r = await fetch(`${API}/analytics/deal/${encodeURIComponent(dealId)}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        const docs = data.documents || [];
+        currentDocs = docs;
+        currentDealId = dealId;
+        if (!docs.length) {
+          docsEmpty.textContent = "No documents found for this deal.";
+          return;
+        }
+        docsEmpty.classList.add("hidden");
+        docsWrap.classList.remove("hidden");
+        docsBody.innerHTML = docs.map(d => `
+          <tr>
+            <td>${d.recipient_email || ""}</td>
+            <td class="small">${d.tracking_id}</td>
+            <td>${d.total_views}</td>
+            <td>${d.unique_visitors}</td>
+            <td class="small">${fmt(d.first_viewed || "")}</td>
+            <td class="small">${fmt(d.last_viewed || "")}</td>
+            <td><a href="${d.view_link}" target="_blank">Open</a></td>
+            <td class="right">
+              <button data-trk="${d.tracking_id}">Timeline</button>
+            </td>
+          </tr>
+        `).join("");
+
+        // Wire timeline buttons
+        [...docsBody.querySelectorAll("button[data-trk]")].forEach(btn => {
+          btn.addEventListener("click", () => openTimeline(btn.dataset.trk));
+        });
+
+        btnExport.disabled = false;
+      } catch (e) {
+        docsEmpty.textContent = `Failed to load analytics. ${e.message}`;
+      }
+    }
+
+    async function openTimeline(trackingId) {
+      try {
+        const r = await fetch(`${API}/analytics/${encodeURIComponent(trackingId)}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        const views = data.views || [];
+        $("docMeta").textContent = `Tracking ID: ${trackingId}  •  Total: ${data.total_views || views.length}  •  Unique: ${data.unique_visitors || ""}`;
+        $("timelineBody").innerHTML = views.map(v => `
+          <tr>
+            <td>${fmt(v.viewed_at)}</td>
+            <td>${v.ip || ""}</td>
+            <td class="small">${v.user_agent || ""}</td>
+            <td class="small">${v.fingerprint || ""}</td>
+          </tr>
+        `).join("");
+        openModal();
+      } catch (e) {
+        alert(`Failed to load timeline: ${e.message}`);
+      }
+    }
+
+    function openModal() { $("modal").classList.add("open"); }
+    function closeModal() { $("modal").classList.remove("open"); }
+    $("closeModal").addEventListener("click", closeModal);
+    $("modal").addEventListener("click", (e)=>{ if (e.target.id === "modal") closeModal(); });
+
+    btnLoadDeal.addEventListener("click", () => {
+      const id = dealIdInput.value.trim();
+      if (!id) { dealIdInput.focus(); return; }
+      loadDealAnalytics(id);
+    });
+
+    btnLoadDoc.addEventListener("click", () => {
+      const trk = trackingIdInput.value.trim();
+      if (!trk) { trackingIdInput.focus(); return; }
+      openTimeline(trk);
+    });
+
+    btnExport.addEventListener("click", () => {
+      if (!currentDocs.length) return;
+      const csv = toCSV(currentDocs);
+      const blob = new Blob([csv], {type:"text/csv"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `deal_${currentDealId || "analytics"}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      a.remove();
+    });
+
+    // Optional: auto-load if dealId provided via query param
+    (function autoLoadFromQuery(){
+      const q = new URLSearchParams(location.search);
+      const d = q.get("deal");
+      if (d) { dealIdInput.value = d; loadDealAnalytics(d); }
+    })();
+  </script>
+</body>
+</html>

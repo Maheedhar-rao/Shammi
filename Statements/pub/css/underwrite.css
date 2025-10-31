@@ -1,0 +1,22 @@
+/* Page-specific styles for underwrite.html */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.gmail-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #111;
+}
+
+.gmail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

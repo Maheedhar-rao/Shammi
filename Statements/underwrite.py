@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 
 from __future__ import annotations
 from pathlib import Path
@@ -9,9 +8,14 @@ from inspect import signature
 from flask import Blueprint, jsonify, request, session
 from werkzeug.utils import secure_filename
 from wrappers import wrap_pdf_with_logo
+from wrappers import wrap_pdf_secure
+from email_preview_system import send_secure_document_email
 from flask import send_file, abort
 from uuid import UUID, uuid4
-
+from urllib.parse import quote_plus
+import html
+import secrets 
+import urllib.parse 
 
 
 
@@ -30,16 +34,22 @@ import logging
 import os
 import traceback
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import time as _time
 import secrets
 import uuid, re
+from io import BytesIO
+import base64
+
 
 from supabase import create_client, Client
 from auth_guard import global_auth_before_request
-# ------------------------------------------------------------------------------
-# Supabase client
-# ------------------------------------------------------------------------------
+from mca_analyzer import MCAAnalyzer
+analyzer = MCAAnalyzer(os.environ.get("ANTHROPIC_API_KEY", ""))
+
+
+
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE = os.environ.get("SUPABASE_SERVICE_ROLE")
 if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE:
@@ -51,15 +61,18 @@ sb = supabase
 def get_sb() -> Client:
     return sb
 
-# ------------------------------------------------------------------------------
-# Paths / constants
-# ------------------------------------------------------------------------------
+
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 EMAILS_BOOK_DIR = BASE_DIR / "emails-books"
 EMAILS_BOOK_DIR.mkdir(exist_ok=True)
 EMAILS_DIR = EMAILS_BOOK_DIR
 LOGO_PATH = str(BASE_DIR / "static" / "logo.png")
+
+_ONE_BY_ONE_GIF = base64.b64decode(
+    "R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=="
+)
+
 
 
 EMAILS_JSON_PATH = Path(os.environ.get("LENDER_EMAILS_PATH", str(BASE_DIR / "emails.json")))
@@ -71,9 +84,10 @@ bp = Blueprint("underwrite", __name__)
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("underwrite")
 
-# ------------------------------------------------------------------------------
-# Optional extractors / rules
-# ------------------------------------------------------------------------------
+
+import sys
+sys.path.insert(0, str(BASE_DIR))
+
 try:
     import Application_extractor as appx
 except Exception as e:
@@ -92,9 +106,6 @@ except Exception as e:
     rules = None
     log.exception("Failed to import lenders_rules: %s", e)
 
-# ------------------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------------------
 def _unique_name(base: str) -> str:
     return f"{int(time.time())}_{secrets.token_hex(3)}_{secure_filename(base)}"
 
@@ -137,9 +148,7 @@ def _inject_length_months(application: dict) -> dict:
 def _safe_email(s: str) -> str:
     return re.sub(r"[^a-z0-9_.+-]+", "_", (s or "").strip().lower())
 
-# ------------------------------------------------------------------------------
-# Extraction
-# ------------------------------------------------------------------------------
+
 def _extract_application_fields(app_pdf_path: Path) -> Dict:
     if appx is None:
         raise RuntimeError("Application_extractor not available")
@@ -161,7 +170,7 @@ def _extract_application_fields(app_pdf_path: Path) -> Dict:
     out = _inject_length_months(out)
     return out
 
-# Statement summarization / aggregation
+
 def _summarize_one_statement_from_bytes(pdf_bytes: bytes, filename: Optional[str]) -> Dict:
     if stx is None:
         raise RuntimeError("Statements_extractor not available")
@@ -224,7 +233,7 @@ def _build_statements_payload(files: List[Tuple[str, bytes]], state_for_rule: Op
         s.pop("_credit_counts", None)
     return {"per_statement": per_statement, **aggregates}
 
-# Lender matching
+
 def _match_lenders(application: Dict, statements: Dict) -> List[Dict]:
     if rules is None:
         log.error("lenders_rules module not available")
@@ -243,16 +252,13 @@ def _append_default_lenders(lenders: List[Dict]) -> List[Dict]:
             lenders.append({"business_name": nm, "score": 1.0, "reason": "Default test lender"})
     return lenders
 
-# ------------------------------------------------------------------------------
-# Email recipients book
-# ------------------------------------------------------------------------------
 def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
 
 def _parse_row_emails(s: str) -> List[str]:
     return [e.strip() for e in str(s or "").split(",") if e and e.strip()]
 
-# NOTE: We keep only the robust CSV+JSON loader (avoid duplicate definitions).
+
 def _user_email() -> str:
     return (session.get("google_email") or session.get("user_email") or "").strip().lower()
 
@@ -381,9 +387,6 @@ def resolve_recipients_user_csv_first(lender_name: str, user_cc: list[str]):
 
     return (to_email or "").strip(), _dedupe_emails(cc_list)
 
-# ------------------------------------------------------------------------------
-# Connected sender (gmail/graph)
-# ------------------------------------------------------------------------------
 def _load_google_token_from_disk(pref_email: Optional[str] = None) -> tuple[Optional[str], Optional[dict]]:
     try:
         if GOOGLE_TOKEN_FILE.exists():
@@ -465,9 +468,7 @@ def safe_get_connected_sender():
         return e2, "gmail", t2
     return None, None, None
 
-# ------------------------------------------------------------------------------
-# Email sending helpers
-# ------------------------------------------------------------------------------
+
 def _build_mime(subject: str, html_body: str, sender_email: str, to_email: str, cc_list: List[str],
                 attachments: List[Tuple[str, bytes]]) -> email.message.Message:
     msg = email.mime.multipart.MIMEMultipart()
@@ -491,7 +492,22 @@ def _build_mime(subject: str, html_body: str, sender_email: str, to_email: str, 
     return msg
 
 def _flatten_google_token(td: dict) -> dict:
-    td = dict(td or {})
+    if td is None:
+        td = {}
+    elif isinstance(td, dict):
+        td = td
+    elif isinstance(td, list):
+        
+        if len(td) == 1 and isinstance(td[0], dict):
+            td = td[0]
+        else:
+            raise ValueError(f"Invalid Google token format (list): {td}")
+    elif isinstance(td, str):
+        
+        raise ValueError(f"Invalid Google token format (string): {td}")
+    else:
+        raise ValueError(f"Unexpected Google token type {type(td)}: {td}")
+
     if isinstance(td.get("token"), dict) and any(k in td["token"] for k in ("client_id","token_uri","refresh_token","access_token","token")):
         core = dict(td["token"])
         for k in ("client_id","client_secret","token_uri","scopes","refresh_token","expiry","access_token","token"):
@@ -581,7 +597,7 @@ def _ensure_google_access_token(token_dict: dict) -> tuple[bool, dict | str]:
 
 def gmail_send(token_dict: dict, subject: str, body_html: str,
                sender_email: str, to_email: str, cc_list: list,
-               attachments: list) -> tuple[bool, str | None]:
+               attachments: list) -> tuple[bool, str | None, str | None]:
     ok, td_or_err = _ensure_google_access_token(token_dict)
     if not ok:
         return False, f"gmail_error:{td_or_err}"
@@ -604,19 +620,22 @@ def gmail_send(token_dict: dict, subject: str, body_html: str,
         return False, f"gmail_error:http:{e}"
 
     if r.status_code not in (200, 202):
-        return False, f"gmail_error:http_{r.status_code}:{r.text[:300]}"
+        return False, f"gmail_error:http_{r.status_code}:{r.text[:300]}", None
     try:
-        rid = r.json().get("id")
+        response_data = r.json()
+        rid = response_data.get("id")
+        thread_id = response_data.get("threadId")
     except Exception:
         rid = None
-    return True, rid
+        thread_id = None
+    return True, rid, thread_id
 
 def graph_send(token_dict: dict, subject: str, body_html: str,
                sender_email: str, to_email: str, cc_list: List[str],
-               attachments: List[Tuple[str, bytes]]) -> Tuple[bool, Optional[str]]:
+               attachments: List[Tuple[str, bytes]]) -> Tuple[bool, Optional[str], Optional[str]]:
     access_token = token_dict.get("access_token") or token_dict.get("token")
     if not access_token:
-        return False, "no_graph_access_token"
+        return False, "no_graph_access_token", None
     msg = {
         "message": {
             "subject": subject,
@@ -643,15 +662,15 @@ def graph_send(token_dict: dict, subject: str, body_html: str,
             timeout=20
         )
         if r.status_code in (202, 200):
-            return True, None
-        return False, f"graph_http_{r.status_code}:{r.text[:200]}"
+            # Note: sendMail doesn't return message ID or conversationId
+            # We'd need to use /me/messages endpoint instead to get those
+            return True, None, None
+        return False, f"graph_http_{r.status_code}:{r.text[:200]}", None
     except Exception as e:
         log.exception("Graph send error")
-        return False, f"graph_error:{e}"
+        return False, f"graph_error:{e}", None
 
-# ------------------------------------------------------------------------------
-# Deals & deliveries persistence
-# ------------------------------------------------------------------------------
+
 def record_deal(
     user_id: str,
     sender_email: str,
@@ -672,6 +691,7 @@ def record_deal(
         "application_json": application_json or {},
         "statements_json": statements_json or {},
         "attachments_json": attachments_json or {},
+        "business_name": (application_json or {}).get("business_name", ""),
     }
 
     res = sb.table("deals").insert(payload, returning="representation").execute()
@@ -702,6 +722,7 @@ def record_delivery(
     status: str,
     login_email: str,
     tracking_id: Optional[Union[str, UUID]] = None,
+    thread_id: Optional[str] = None, 
 ) -> int:
     tid = str(tracking_id or uuid4())  
     payload = {
@@ -711,6 +732,7 @@ def record_delivery(
         "cc_csv": ",".join(cc_list or []),
         "provider": provider,
         "provider_msg_id": provider_msg_id or "",
+        "thread_id": thread_id or "",
         "status": status,
         "sender_email": login_email,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -719,6 +741,71 @@ def record_delivery(
 
     res = sb.table("deliveries").insert(payload, returning="representation").execute()
     rows = res.data or []
+def record_open_event(
+    tracking_id: str,
+    deal_id: Optional[int],
+    lender_name: str,
+    req,
+) -> None:
+    """
+    Logs an open event to a central table.
+
+    Create a Supabase table, e.g. `email_opens` with columns:
+      id           bigint, primary key
+      tracking_id  text
+      deal_id      int8
+      lender_name  text
+      opened_at    timestamptz
+      user_agent   text
+      ip           text
+    """
+    try:
+        ua = req.headers.get("User-Agent") or ""
+        ip = (
+            req.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+            or req.remote_addr
+            or ""
+        )
+        payload = {
+            "tracking_id": tracking_id,
+            "deal_id": deal_id,
+            "lender_name": lender_name or "",
+            "opened_at": datetime.now(timezone.utc).isoformat(),
+            "user_agent": ua,
+            "ip": ip,
+        }
+        sb.table("email_opens").insert(payload).execute()
+    except Exception:
+        log.exception("Failed to record open event for %s", tracking_id)
+
+
+@bp.get("/pixel/<tracking_id>.gif")
+def pixel(tracking_id: str):
+    """
+    1x1 tracking pixel endpoint.
+    Called when the email client loads the image; we log the open
+    and return a transparent GIF.
+    """
+    try:
+        deal_id = request.args.get("deal_id", type=int)
+    except Exception:
+        deal_id = None
+
+    lender_name = request.args.get("lender") or ""
+
+    try:
+        record_open_event(tracking_id, deal_id, lender_name, request)
+    except Exception:
+        log.exception("Error recording open event for %s", tracking_id)
+
+  
+    return send_file(
+        BytesIO(_ONE_BY_ONE_GIF),
+        mimetype="image/gif",
+        as_attachment=False,
+        download_name="pixel.gif",
+    )
+
     if not rows:
         fetch = (
             sb.table("deliveries")
@@ -737,11 +824,8 @@ def record_delivery(
 
     return rows[0]["id"]
 
-# ------------------------------------------------------------------------------
-# Wrapper 
-# ------------------------------------------------------------------------------
 
-# --- ONE: make _wrap_upload pass watermark/footer ---
+
 def _wrap_upload(saved: dict, *, footer_text=None, watermark_text=None, prefix: str = None) -> dict:
     import os
     import re
@@ -751,7 +835,7 @@ def _wrap_upload(saved: dict, *, footer_text=None, watermark_text=None, prefix: 
     if not fn:
         raise RuntimeError("wrap function missing in wrappers.py")
 
-    # skip if already wrapped
+    
     name = saved.get("filename") or os.path.basename(saved["path"])
     if re.search(r"(?:\.wrapped\.pdf|-\s*wrapped\.pdf)$", name, re.I):
         return {**saved, "wrap_ok": True, "wrap_msg": "already wrapped"}
@@ -759,19 +843,93 @@ def _wrap_upload(saved: dict, *, footer_text=None, watermark_text=None, prefix: 
     out_path = fn(
         saved["path"],
         logo_path=LOGO_PATH,
-        output_dir=str(UPLOAD_DIR),  # ensure we can serve it
+        output_dir=str(UPLOAD_DIR),  
         footer_text=footer_text or "Submitted via Pathway Catalyst",
         watermark_text=watermark_text or "SENT VIA PATHWAY CATALYST",
     )
     log.info("wrap: ok path=%s -> %s", saved["path"], out_path)
     return {"path": out_path, "filename": os.path.basename(out_path), "wrap_ok": True, "wrap_msg": "ok"}
 
+def _wrap_upload_secure(
+    saved: dict,
+    *,
+    recipient_email: str,
+    deal_id: int,
+    user_id: str,
+    tracking_url: str = None
+):
+    """
+    Secure wrapper: apply 6-layer fingerprinting using wrappers.wrap_pdf_secure()
+    Does NOT apply logo / visual watermark.
+    """
+    import wrappers
+
+    fn = getattr(wrappers, "wrap_pdf_secure", None)
+    if not fn:
+        raise RuntimeError("wrap_pdf_secure missing in wrappers.py")
+
+    input_path = saved["path"]
+    file_name = os.path.basename(input_path)
+
+    if file_name.endswith(".secure.pdf") or ".secure_" in file_name:
+        return {**saved, "wrap_ok": True, "wrap_msg": "already secure wrapped"}
+
+ 
+    out_path, fingerprint = fn(
+        input_path,
+        recipient_email=recipient_email,
+        deal_id=str(deal_id),
+        user_id=str(user_id),
+        tracking_url=tracking_url,
+    )
+
+    return {
+        **saved,
+        "path": out_path,
+        "filename": os.path.basename(out_path),
+        "wrap_ok": True,
+        "fingerprint": fingerprint,
+        "wrap_type": "secure",
+    }
+
+def _wrap_upload_combined(
+    saved: dict,
+    *,
+    recipient_email: str,
+    deal_id: int,
+    user_id: str,
+    footer_text: str = None,
+    watermark_text: str = None,
+    tracking_url: str = None
+):
+    """
+    Combined wrapper:
+    1. Apply secure 6-layer PDF fingerprint (metadata, ID, annotation, embedded original)
+    2. Then apply cosmetic logo/watermark overlay.
+    """
+ 
+    wrapped = _wrap_upload_secure(
+        saved,
+        recipient_email=recipient_email,
+        deal_id=deal_id,
+        user_id=user_id,
+        tracking_url=tracking_url,
+    )
+
+    
+    final = _wrap_upload_with_logo(
+        {"path": wrapped["path"], "filename": wrapped["filename"]},
+        footer_text=footer_text,
+        watermark_text=watermark_text,
+    )
+
+    final["fingerprint"] = wrapped["fingerprint"]
+    final["wrap_type"] = "combined"
+
+    return final
 
 
 
-# ------------------------------------------------------------------------------
-# Statements DB fetch (fallback)
-# ------------------------------------------------------------------------------
 def _fetch_statements_from_db(deal_id: Optional[int] = None,
                               application_id: Optional[int] = None,
                               limit: int = 12) -> List[Tuple[str, bytes]]:
@@ -805,9 +963,7 @@ def _fetch_statements_from_db(deal_id: Optional[int] = None,
         log.warning("fetch statements from db failed: %s", e)
     return out
 
-# ------------------------------------------------------------------------------
-# Routes
-# ------------------------------------------------------------------------------
+
 @bp.post("/extract-application")
 
 def extract_application_only():
@@ -816,9 +972,8 @@ def extract_application_only():
         if not app_file:
             return jsonify({"error": "Missing application PDF"}), 400
         saved = _save_upload(app_file, prefix="application")
-        wrap_saved = _wrap_upload(saved, prefix="application")
         application = _extract_application_fields(Path(saved["path"]))
-        application["_wrapped_filename"] = wrap_saved["filename"]
+        application["_wrapped_filename"] = saved["filename"]
         #application["_attachment"] = saved
         return jsonify({"application": application})
     except Exception as e:
@@ -827,6 +982,7 @@ def extract_application_only():
 
 @bp.post("/statements-and-match")
 def statements_and_match():
+    analysis = None  
     try:
         application_json = request.form.get("application_json")
         if not application_json:
@@ -846,7 +1002,6 @@ def statements_and_match():
         stmt_files = request.files.getlist("statements") or []
         min_files = 4 if state in {"NY", "CA"} else 3
 
-        # Prefer uploaded files; otherwise fetch from DB if deal_id/application_id provided
         files_for_summary: List[Tuple[str, bytes]] = []
         saved_files: List[dict] = []
 
@@ -855,25 +1010,24 @@ def statements_and_match():
             application_id = request.form.get("application_id")
             fetched = _fetch_statements_from_db(
                 deal_id=int(deal_id) if str(deal_id or "").isdigit() else None,
-                application_id=int(application_id) if str(application_id or "").isdigit() else None
+                application_id=int(application_id) if str(application_id or "").isdigit() else None,
             )
             if fetched:
                 for fname, raw in fetched:
-                    # Fetched from storage as bytes; no local path to wrap.
+                    
                     files_for_summary.append((fname, raw))
                     saved_files.append({"path": f"storage://{fname}", "filename": fname})
             else:
                 return jsonify({"error": f"Need at least {min_files} statements (upload or present in DB) for state {state}"}), 400
         else:
             for f in stmt_files:
-                # 1) save raw
+               
                 saved = _save_upload(f, prefix="stmt")
-                # 2) wrap raw -> wrapped using _wrap_upload
-                wrap_saved = _wrap_upload(saved, prefix="stmt")
+                
+                saved_files.append(saved)
+                with open(saved["path"], "rb") as fh:
+                    files_for_summary.append((saved["filename"], fh.read()))
 
-                saved_files.append(wrap_saved)
-                with open(wrap_saved["path"], "rb") as fh:
-                    files_for_summary.append((wrap_saved["filename"], fh.read()))
 
         prev_json = request.form.get("existing_statements_json")
         prev = None
@@ -886,8 +1040,6 @@ def statements_and_match():
         statements_new = _build_statements_payload(files_for_summary, state_for_rule=state)
         statements_new["_wrapped_filenames"] = [f["filename"] for f in saved_files]
 
-        #statements_new["_saved_files"] = saved_files
-
         if prev and isinstance(prev, dict):
             combined_per = (prev.get("per_statement") or []) + (statements_new.get("per_statement") or [])
             combined_files = (prev.get("_saved_files") or []) + saved_files
@@ -896,9 +1048,50 @@ def statements_and_match():
         else:
             statements_payload = statements_new
 
+       
+        try:
+            
+            pdf_paths = [
+                f["path"]
+                for f in saved_files
+                if isinstance(f.get("path"), str) and not f["path"].startswith("storage://")
+            ]
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            if api_key and pdf_paths:
+                analyzer = MCAAnalyzer(api_key)
+                combined = {"text": "", "tables": []}
+                for p in pdf_paths:
+                    try:
+                        payload = analyzer.load_bank_statement_pdf(p)
+                        combined["text"] += "\n\n" + (payload.get("text") or "")
+                        combined["tables"].extend(payload.get("tables") or [])
+                    except Exception:
+                        continue
+
+                business_info = {
+                    "business_name": application.get("business_name"),
+                    "state": application.get("state"),
+                    "industry": application.get("industry"),
+                    "fico": application.get("fico"),
+                    "length_of_ownership": application.get("length_of_ownership"),
+                    "length_months": application.get("length_months"),
+                    "positions": application.get("positions"),
+                }
+
+                if combined["text"] or combined["tables"]:
+                    analysis = analyzer.prepare_analysis_data(combined, business_info)
+        except Exception:
+            traceback.print_exc()
+            analysis = None
+
         lenders = _match_lenders(application, statements_payload)
         lenders = _append_default_lenders(lenders)
-        return jsonify({"statements": statements_payload, "lenders": lenders})
+
+        return jsonify({
+            "statements": statements_payload,
+            "lenders": lenders,
+            "analysis": analysis,
+        })
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -941,7 +1134,7 @@ def extract_and_match():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-# Attachments parsing
+
 def _parse_attachments_from_json(data: dict) -> List[Tuple[str, bytes]]:
     out: List[Tuple[str, bytes]] = []
     try:
@@ -1092,13 +1285,65 @@ def emails_book_upload():
     cnt, sample = _preview_emails_csv_text(text)
     return jsonify({"ok": True, "filename": path.name, "bytes": len(text.encode("utf-8")), "count": cnt, "sample": sample})
 
-# ------------------------------------------------------------------------------
-# Send emails (now with server-side wrapping fallback)
-# ------------------------------------------------------------------------------
+
+def _build_tracking_pixel_url(
+    tracking_id: str,
+    deal_id: int,
+    lender_name: str,
+) -> str:
+    """
+    Build an absolute URL to the Supabase pixel function.
+    """
+    docs_base = os.getenv(
+        "DOCS_BASE_URL",
+        "https://lxqsswgqugwszhovfsxw.functions.supabase.co",
+    )
+    qs = urllib.parse.urlencode(
+        {
+            "tracking_id": tracking_id,
+            "deal_id": deal_id,
+            "lender": lender_name or "",
+        }
+    )
+    return f"{docs_base}/pixel?{qs}"
+
+
+def _inject_tracking_pixel(
+    body_html: str,
+    *,
+    tracking_id: str,
+    deal_id: int,
+    lender_name: str,
+) -> str:
+    """
+    Append a hidden 1x1 tracking pixel <img> to the HTML body.
+    If </body> exists, we inject before it; otherwise we append at the end.
+    """
+    pixel_url = f"https://lxqsswgqugwszhovfsxw.functions.supabase.co/email-pixel?tracking_id={tracking_id}&deal_id={deal_id}&lender={lender_name}"
+
+    pixel_tag = (
+    f'<img src="{pixel_url}" alt="" width="1" height="1" '
+    f'style="display:none;border:0;" />'
+)
+    lower = body_html.lower()
+    closing_idx = lower.rfind("</body>")
+    if closing_idx != -1:
+        
+        return (
+            body_html[:closing_idx]
+            + pixel_tag
+            + body_html[closing_idx:]
+        )
+    else:
+        
+        return body_html + "\n" + pixel_tag
+
+"""
 @bp.post("/send")
 def send_emails():
-    """
-    json: {
+
+    json: 
+    {
       "selected_lenders":[...],
       "subject":"...",
       "message":"...",
@@ -1111,8 +1356,9 @@ def send_emails():
       "parent_deal_id": 123,    # optional
       "exclude": ["LenderA"]    # optional
     }
-    """
+    
     try:
+        lname = ""
         data = request.get_json(force=True) or {}
         selected = data.get("selected_lenders") or []
         subject  = data.get("subject") or ""
@@ -1152,6 +1398,7 @@ def send_emails():
                 pass
 
         exclude = set([(s or "").strip().lower() for s in (data.get("exclude") or []) if s])
+
         parent_deal_id = data.get("parent_deal_id")
         if parent_deal_id and not exclude:
             try:
@@ -1165,70 +1412,173 @@ def send_emails():
                 pass
 
         deliveries = []
+        prov = (provider or "").lower()
+
         for lender in selected:
             lname = (lender or "").strip()
             lname_key = lname.lower()
-
-            if lname_key in exclude:
-                deliveries.append({"lender": lname, "from": sender_email, "status": "skipped", "reason": "already sent"})
-                record_delivery(deal_id, lname, "", user_cc, provider or "", None, "skipped", sender_email)
+            if not lname or lname_key in exclude:
                 continue
 
-            attachments_for_this = per_map.get(lname) or per_map.get(lname_key)
+            # 1) Resolve recipients (CSV first; falls back to emails.json)
+            try:
+                to_email, cc_list = resolve_recipients_user_csv_first(lname, user_cc)
+            except Exception as e:
+                log.warning(f"resolve_recipients failed for {lname}: {e}")
+                to_email, cc_list = None, _dedupe_emails(user_cc or [])
 
-            # If UI didn’t send per-lender files, build them now and wrap server-side
-            if not attachments_for_this and attachments_global:
-                attachments_for_this = []
-                for (fname, raw) in attachments_global:
-                    if _is_wrapped_filename(fname):
-                        attachments_for_this.append((fname, raw))
-                        continue
-                    okw, out_or_err, final_name = _wrap_via_api(
-                        lender=lname,
-                        raw_pdf=raw,
-                        filename=fname,
-                        deal_id=deal_id,
-                        recipient_email=sender_email,
-                    )
-                    if okw:
-                        attachments_for_this.append((final_name, out_or_err))
-                    else:
-                        log.warning("wrap failed for %s -> %s: %s", fname, lname, out_or_err)
-                        attachments_for_this.append((fname, raw))
-
-            to_email, cc_list = resolve_recipients_user_csv_first(lname, user_cc)
             if not to_email:
-                deliveries.append({"lender": lname, "from": sender_email, "status": "skipped",
-                                   "reason": "No recipient email in emails-book/JSON"})
-                record_delivery(deal_id, lname, "", user_cc, provider or "", None, "skipped", sender_email)
+                reason = "no_recipient"
+                deliveries.append({
+                    "lender": lname, "from": sender_email, "to": "",
+                    "cc": cc_list, "status": "error", "provider": (provider or ""), "reason": reason
+                })
+                try:
+                    record_delivery(deal_id, lname, "", cc_list, provider or "", None, "error", sender_email)
+                except Exception:
+                    pass
                 continue
 
-            ok, provider_id = False, None
-            if (provider or "").lower() == "gmail":
-                ok, provider_id = gmail_send(token, final_subject, body, sender_email, to_email, cc_list, attachments=attachments_for_this)
-            elif (provider or "").lower() in ("outlook", "graph"):
-                ok, provider_id = graph_send(token, final_subject, body, sender_email, to_email, cc_list, attachments=attachments_for_this)
+            # 2) Choose attachments per-lender (dict → list; list → same for all; else global)
+            if isinstance(per_map, dict):
+                attachments_for_this = per_map.get(lname) or per_map.get(lname_key) or []
+            elif isinstance(per_map, list):
+                attachments_for_this = per_map
             else:
-                deliveries.append({"lender": lname, "from": sender_email, "to": to_email, "cc": cc_list,
-                                   "status": "error", "reason": f"Unsupported provider {provider}"})
-                record_delivery(deal_id, lname, to_email, cc_list, provider or "", None, "error", sender_email)
+                attachments_for_this = attachments_global
+
+            _ = need_wrap_fallback  # reserved flag; wrapping handled earlier if needed
+
+            # 3) Inject tracking pixel
+            delivery_tracking_id = str(uuid4())
+            body_with_pixel = _inject_tracking_pixel(
+                body_html=body,
+                tracking_id=delivery_tracking_id,
+                deal_id=deal_id,
+                lender_name=lname,
+            )
+
+            # 4) Send
+            ok, provider_id, thread_id = False, None, None
+            if prov == "gmail":
+                ok, provider_id, thread_id = gmail_send(
+                    token, final_subject, body_with_pixel,
+                    sender_email, to_email, cc_list,
+                    attachments=attachments_for_this,
+                )
+            elif prov in ("outlook", "graph"):
+                ok, provider_id, thread_id = graph_send(
+                    token, final_subject, body_with_pixel,
+                    sender_email, to_email, cc_list,
+                    attachments=attachments_for_this,
+                )
+            else:
+                reason = f"unsupported_provider:{provider}"
+                deliveries.append({
+                    "lender": lname, "from": sender_email, "to": to_email,
+                    "cc": cc_list, "status": "error", "provider": (provider or ""), "reason": reason
+                })
+                try:
+                    record_delivery(deal_id, lname, to_email, cc_list, provider or "", None, "error", sender_email,
+                                    tracking_id=delivery_tracking_id)
+                except Exception:
+                    pass
                 continue
 
             status = "sent" if ok else "error"
+            reason = None if ok else (provider_id if isinstance(provider_id, str) else "send_failed")
+
             deliveries.append({
                 "lender": lname, "from": sender_email, "to": to_email, "cc": cc_list,
-                "status": status, "provider": (provider or ""), "provider_id": provider_id
+                "status": status, "provider": (provider or ""), "provider_id": (None if not ok else provider_id),
+                "reason": reason
             })
-            record_delivery(deal_id, lname, to_email, cc_list, provider or "", provider_id, status, sender_email)
+            try:
+                record_delivery(
+                    deal_id, lname, to_email, cc_list, provider or "",
+                    (None if not ok else provider_id), status, sender_email,
+                    tracking_id=delivery_tracking_id,
+                    thread_id=thread_id
+                )
+            except Exception:
+                pass
 
-        return jsonify({"ok": True, "from": sender_email, "deal_id": deal_id, "subject": final_subject, "deliveries": deliveries})
+        return jsonify({
+            "ok": True,
+            "from": sender_email,
+            "deal_id": deal_id,
+            "subject": final_subject,
+            "deliveries": deliveries
+        })
     except Exception as e:
         log.exception("send_emails failed: %s", e)
         return jsonify({"error": str(e)}), 500
 
-# ------------------------------------------------------------------------------
-# Deals list / deliveries / single deal
-# ------------------------------------------------------------------------------
+"""
+def _record_open_event_for_tracking_id(tracking_id: str) -> None:
+    """
+    Lookup doc_tracking by tracking_id and insert an open event row.
+    Safe to fail silently (we never want to break the pixel response).
+    """
+    try:
+     
+        resp = (
+            sb.table("doc_tracking")
+              .select("id")
+              .eq("tracking_id", tracking_id)
+              .limit(1)
+              .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            
+            return
+
+        doc_tracking_id = rows[0]["id"]
+
+
+        ua = request.headers.get("User-Agent") or ""
+        ip = (
+            (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+            or request.remote_addr
+            or ""
+        )
+
+        payload = {
+            "doc_tracking_id": doc_tracking_id,
+            "opened_at": datetime.now(timezone.utc).isoformat(),
+            "user_agent": ua,
+            "ip_address": ip,
+        }
+
+        sb.table("doc_tracking_opens").insert(payload).execute()
+    except Exception:
+        
+        log.exception("Failed to record open event for tracking_id=%s", tracking_id)
+
+
+
+@bp.get("/pixel/<tracking_id>.gif")
+def tracking_pixel(tracking_id: str):
+    """
+    1x1 tracking pixel endpoint.
+    When the email client loads this URL, we record an 'open' event and
+    return a transparent GIF.
+    """
+    try:
+        _record_open_event_for_tracking_id(tracking_id)
+    except Exception:
+        
+        log.exception("tracking_pixel failed for %s", tracking_id)
+
+    return send_file(
+        BytesIO(_ONE_BY_ONE_GIF),
+        mimetype="image/gif",
+        as_attachment=False,
+        download_name="pixel.gif",
+    )
+
+
 @bp.get("/deals")
 def list_deals():
     try:
@@ -1339,9 +1689,6 @@ def get_deal(deal_id: int):
         log.exception("get_deal failed: %s", e)
         return jsonify({"error": "Failed to load deal"}), 500
 
-# ------------------------------------------------------------------------------
-# Rematch & Leads
-# ------------------------------------------------------------------------------
 @bp.post("/rematch")
 def rematch():
     try:
@@ -1380,9 +1727,101 @@ def api_leads():
 
     return jsonify({"leads": resp.data or []})
 
-# ------------------------------------------------------------------------------
-# New: Hydrator + submit/resubmit for dashboard/modes
-# ------------------------------------------------------------------------------
+@bp.get("/lead/<int:application_id>")
+def api_lead_detail(application_id: int):
+    """Fetch lead data from applications table - check payload for bank statements"""
+    try:
+        sbu = get_sb()
+        
+   
+        app_resp = (sbu.table("applications")
+                      .select("*")
+                      .eq("id", int(application_id))
+                      .limit(1)
+                      .execute())
+        
+        if not app_resp.data:
+            return jsonify({"error": "Lead not found"}), 404
+        
+        lead = app_resp.data[0]
+        
+        payload = lead.get("payload") or {}
+        
+        documents = {
+            "statements": [],
+            "applications": []
+        }
+        has_statements = False
+        
+        
+        if payload and isinstance(payload, dict):
+            documents["applications"].append({
+                "id": f"app_{application_id}",
+                "filename": "application_data.json",
+                "data": json.dumps(payload)
+            })
+        
+     
+        bank_statements = (
+            payload.get("bank_statements") or
+            payload.get("statements") or
+            payload.get("statement_data") or
+            payload.get("statement") or
+            None
+        )
+        
+        if bank_statements:
+          
+            if isinstance(bank_statements, list):
+                
+                for i, stmt in enumerate(bank_statements):
+                    if stmt:  
+                        documents["statements"].append({
+                            "id": f"stmt_{application_id}_{i}",
+                            "filename": f"statement_{i+1}.json",
+                            "data": json.dumps(stmt) if isinstance(stmt, dict) else stmt
+                        })
+                        has_statements = True
+            elif isinstance(bank_statements, dict):
+               
+                documents["statements"].append({
+                    "id": f"stmt_{application_id}",
+                    "filename": "bank_statements.json",
+                    "data": json.dumps(bank_statements)
+                })
+                has_statements = True
+            elif isinstance(bank_statements, str):
+             
+                try:
+                    parsed = json.loads(bank_statements)
+                    documents["statements"].append({
+                        "id": f"stmt_{application_id}",
+                        "filename": "bank_statements.json",
+                        "data": json.dumps(parsed)
+                    })
+                    has_statements = True
+                except:
+                    
+                    documents["statements"].append({
+                        "id": f"stmt_{application_id}",
+                        "filename": "bank_statements.txt",
+                        "data": bank_statements
+                    })
+                    has_statements = True
+        
+        log.info(f"Loaded lead {application_id}: has_app=true, has_statements={has_statements}")
+        
+        return jsonify({
+            "lead": lead,
+            "documents": documents,
+            "has_statements": has_statements,
+            "has_application": True  
+        })
+        
+    except Exception as e:
+        log.exception("Failed to fetch lead detail: %s", e)
+        return jsonify({"error": str(e)}), 500
+
 @bp.get("/deal/<int:deal_id>")
 def api_underwrite_deal(deal_id: int):
     """
@@ -1397,7 +1836,7 @@ def api_underwrite_deal(deal_id: int):
             return jsonify({"error":"not found"}), 404
         row = base[0]
         app_json = row.get("application_json") or {}
-        # Try documents
+        
         docs = []
         try:
             bucket = os.environ.get("STATEMENTS_BUCKET", "statements")
@@ -1508,280 +1947,115 @@ def serve_upload(fname):
 def _upload_path_from_filename(fname: str) -> str:
     return str(UPLOAD_DIR / secure_filename(fname))
 
-"""
-# --- TWO: /wrap endpoint should accept and forward the texts ---
-@bp.post("/wrap")
-def api_wrap():
-    
-    from flask import send_file, jsonify, request
-    import re
 
-    f = request.files.get("file")
-    if not f:
-        return jsonify({"error": "missing file"}), 400
 
-    saved = _save_upload(f, prefix="wrap")
-    ctx = {
-        "lender": (request.form.get("lender") or "").strip(),
-        "deal": (request.form.get("deal_id") or "").strip(),
-        "email": (request.form.get("recipient_email") or session.get("user_email") or "").strip(),
-        "user": (session.get("user_name") or session.get("user_email") or "").strip(),
-        "tracking": uuid.uuid4().hex[:8],
-        }
-
-    # Always have defaults so watermark/footer appear even if client didn't pass them
-    wm = (request.form.get("force_watermark_text")
-          or request.form.get("watermark_text")
-          or "SENT VIA PATHWAY CATALYST").strip()
-    ft = (request.form.get("force_footer_template")
-          or request.form.get("footer_text")
-          or "Submitted via Pathway Catalyst").strip()
-              # --- TRY: use production wrapper when we have enough context ---
-
-    tid = session.get("_tracking_id")
-    if not tid:
-      tid = uuid.uuid4().hex[:8]
-      session["_tracking_id"] = tid
+@bp.post("/pdf/link")
+def create_pdf_link():
     try:
-        use_prod = bool((ctx["deal"] or "").strip() and (ctx["lender"] or "").strip())
-        if use_prod:
-            import os, wrappers
-            _deal = int(ctx["deal"]) if str(ctx["deal"]).isdigit() else ctx["deal"]
-            _user_id = session.get("google_email") or session.get("user_id") or "demo-user"
-            info = wrappers.issue_wrapper_user_branded(
-                user_id=_user_id,
-                deal_id=_deal,
-                original_pdf_path=saved["path"],
-                funder_name=ctx["lender"],
-                recipient_email=ctx["email"],
-                storage_dir=str(UPLOAD_DIR),
-                supabase_url=SUPABASE_URL,
-                supabase_service_key=SUPABASE_SERVICE_ROLE,
-
-            # pass your texts as-is (wrapper uses {funder}/{recipient}/{deal}/{fp})
-                force_watermark_text=wm or None,
-                force_footer_template=ft or None,
-
-            # ensure in-transit docs reuse the same tracker via {fp}
-                force_tracking_id=tid,
-            )
-
-            out_path = info["wrapper_path"]
-            out_name = os.path.basename(out_path)
-            return send_file(out_path, mimetype="application/pdf",
-                         as_attachment=False, download_name=out_name, max_age=0)
-    except Exception as e:
-        log.exception("issue_wrapper_user_branded failed; falling back to _wrap_upload: %s", e)
-
+        data = request.get_json()
+        pdf_path = data.get("pdf_path")
+        recipient = data.get("recipient_email", "")
+        deal_id = data.get("deal_id")
         
-    try:
-        use_prod = bool((ctx["deal"] or "").strip() and (ctx["lender"] or "").strip())
-        if use_prod and not already_wrapped:
-            import os
-            import wrappers
-            # Normalize deal id (int if possible; otherwise pass string)
-            _deal = int(ctx["deal"]) if str(ctx["deal"]).isdigit() else ctx["deal"]
-            _user_id = session.get("google_email") or session.get("user_id") or "demo-user"
-
-            info = wrappers.issue_wrapper_user_branded(
-                user_id=_user_id,
-                deal_id=_deal,
-                original_pdf_path=saved["path"],
-                funder_name=ctx["lender"],
-                recipient_email=ctx["email"],
-                storage_dir=str(UPLOAD_DIR),
-                supabase_url=SUPABASE_URL,
-                supabase_service_key=SUPABASE_SERVICE_ROLE,
-                # force the exact texts you already built (logo is resolved internally)
-                force_watermark_text=wm,
-                force_footer_template=ft,
-                # Optional: explicitly force a logo file you control
-                # force_logo_path=LOGO_PATH,
-            )
-
-            out_path = info["wrapper_path"]
-            out_name = os.path.basename(out_path)
-
-            return send_file(
-                out_path,
-                mimetype="application/pdf",
-                as_attachment=False,
-                download_name=out_name,
-                max_age=0,
-            )
-    except Exception as e:
-        log.exception("issue_wrapper_user_branded failed; falling back to _wrap_upload: %s", e)
-
+        # Generate token
+        token = secrets.token_urlsafe(24)
         
-
-
-    # Skip only if the UPLOADED file is *already* a wrapped PDF; otherwise wrap now
-    name_up = (f.filename or "").strip()
-    name_saved = (saved.get("filename") or "").strip()
-    already_wrapped = bool(
-        re.search(r"(?:\.wrapped\.pdf|-\s*wrapped\.pdf)$", name_up, flags=re.I) or
-        re.search(r"(?:\.wrapped\.pdf|-\s*wrapped\.pdf)$", name_saved, flags=re.I)
-    )
-
-
-    name_up = (f.filename or "").strip()
-    name_saved = (saved.get("filename") or "").strip()
-    already_wrapped = bool(
-        re.search(r"(?:\.wrapped\.pdf|-\s*wrapped\.pdf)$", name_up, flags=re.I) or
-        re.search(r"(?:\.wrapped\.pdf|-\s*wrapped\.pdf)$", name_saved, flags=re.I)  
-    )
-
-    if already_wrapped:
-        wrapped = saved  # trust client-provided wrapped PDF
-    else:
-        wrapped = _wrap_upload(saved, footer_text=ft, watermark_text=wm)
-
-    return send_file(
-        wrapped["path"],                       # serve the exact file we produced
-        mimetype="application/pdf",
-        as_attachment=False,
-        download_name=wrapped["filename"],
-        max_age=0,
-    )
-
-"""
-"""
-@bp.post("/wrap")
-def api_wrap():
-    
-    from flask import send_file, jsonify, request, session
-    import os, re, uuid
-
-    f = request.files.get("file")
-    if not f:
-        return jsonify({"error": "missing file"}), 400
-
-    # Save upload
-    saved = _save_upload(f, prefix="wrap")
-
-    # Context (in-transit)
-    ctx = {
-        "lender": (request.form.get("lender") or "").strip(),
-        "deal":   (request.form.get("deal_id") or "").strip(),
-        "email":  (request.form.get("recipient_email")
-                   or session.get("user_email")
-                   or session.get("google_email")
-                   or "").strip(),
-        "user":   (session.get("user_name")
-                   or session.get("user_email")
-                   or session.get("google_email")
-                   or "").strip(),
-    }
-
-    # Stable per-session tracking id
-    tid = session.get("_tracking_id")
-    if not tid:
-        tid = uuid.uuid4().hex[:8]
-        session["_tracking_id"] = tid
-
-    # Texts (keep your inputs; production wrapper uses {funder}/{recipient}/{deal}/{fp})
-    wm = (request.form.get("force_watermark_text")
-          or request.form.get("watermark_text")
-          or "SENT VIA PATHWAY CATALYST • {fp}").strip()
-    ft = (request.form.get("force_footer_template")
-          or request.form.get("footer_text")
-          or "Submitted to {funder} by {recipient} • Track {fp}").strip()
-
-    # Compute already_wrapped first (needed below)
-    name_up = (f.filename or "").strip()
-    name_saved = (saved.get("filename") or "").strip()
-    already_wrapped = bool(
-        re.search(r"(?:\.wrapped\.pdf|-\s*wrapped\.pdf)$", name_up, flags=re.I) or
-        re.search(r"(?:\.wrapped\.pdf|-\s*wrapped\.pdf)$", name_saved, flags=re.I)
-    )
-
-    def _normalize_tokens(t: str) -> str:
-        if not t: return ""
-        import re
-        t = t.replace("{{", "{").replace("}}", "}")  # allow {{token}}
-        t = re.sub(r"{\s*deal_id\s*}", "{deal}", t)        # alias -> canonical
-        t = re.sub(r"{\s*tracking_id\s*}", "{fp}", t)
-        t = re.sub(r"{\s*tracking\s*}", "{fp}", t)
-        return t
-
-    ft_norm = _normalize_tokens(ft)
-    wm_norm = _normalize_tokens(wm)
-
-    # Try production wrapper if we have enough context
-    try:
-        use_prod = bool(ctx["lender"] and ctx["deal"])
-        if use_prod and not already_wrapped:
-            import wrappers
-            _deal = int(ctx["deal"]) if str(ctx["deal"]).isdigit() else ctx["deal"]
-            _user_id = (session.get("google_email") or session.get("user_id") or "demo-user")
-            
-
-            info = wrappers.issue_wrapper_user_branded(
-                user_id=_user_id,
-                deal_id=_0,
-                original_pdf_path=saved["path"],
-                funder_name=ctx["lender"],
-                recipient_email=ctx["email"],
-                storage_dir=str(UPLOAD_DIR),
-                supabase_url=SUPABASE_URL,
-                supabase_service_key=SUPABASE_SERVICE_ROLE,
-                # pass through texts and the session tracker
-                force_watermark_text=wm or None,
-                force_footer_template=ft or None,
-                force_tracking_id=tid,
-                # optional: you can force a logo file if you want:
-                # force_logo_path=LOGO_PATH,
-            )
-
-            out_path = info["wrapper_path"]
-            return send_file(
-                out_path,
-                mimetype="application/pdf",
-                as_attachment=False,
-                download_name=os.path.basename(out_path),
-                max_age=0,
-            )
+        # Store in DB
+        get_sb().table("pdf_links").insert({
+            "token": token,
+            "pdf_path": pdf_path,
+            "recipient": recipient,
+            "deal_id": deal_id,
+            "created": datetime.now(timezone.utc).isoformat(),
+            "expires": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+            "views": 0
+        }).execute()
+        
+        link = f"{request.host_url}v/{token}"
+        log.info(f"Created PDF link: {token} for {recipient}")
+        
+        return jsonify({"success": True, "link": link, "token": token})
+        
     except Exception as e:
-        log.exception("issue_wrapper_user_branded failed; falling back to _wrap_upload: %s", e)
-
-    # Fallback path: expand tokens locally for _wrap_upload (it doesn't expand)
-    token_map = {
-        "funder": ctx["lender"],
-        "lender": ctx["lender"],
-        "recipient": ctx["email"],
-        "email": ctx["email"],
-        "deal": ctx["deal"],
-        "fp": tid,
-        "tracking": tid,
-        "tracking_id": tid,
-        "user": ctx["user"],
-        "sender": ctx["user"],
-    }
-    def _expand(text: str) -> str:
-        if not text: return ""
-        # supports {token} and {{token}}
-        text = re.sub(r"{{\s*(\w+)\s*}}", lambda m: str(token_map.get(m.group(1), "")), text)
-        text = re.sub(r"{\s*(\w+)\s*}",  lambda m: str(token_map.get(m.group(1), "")), text)
-        return text
-
-    ft_expanded = _expand(ft)
-    wm_expanded = _expand(wm)
-
-    if already_wrapped:
-        wrapped = saved
-    else:
-        wrapped = _wrap_upload(saved, footer_text=ft_expanded, watermark_text=wm_expanded)
-
-    return send_file(
-        wrapped["path"],
-        mimetype="application/pdf",
-        as_attachment=False,
-        download_name=wrapped["filename"],
-        max_age=0,
-    )
-"""
+        log.exception("Failed to create PDF link")
+        return jsonify({"error": str(e)}), 500
 
 
+@bp.get("/v/<token>")
+def view_pdf(token: str):
+    try:
+       
+        result = get_sb().table("pdf_links").select("*").eq("token", token).single().execute()
+        
+        if not result.data:
+            abort(404)
+        
+        info = result.data
+        
+        
+        expires = datetime.fromisoformat(info["expires"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires:
+            return "Link expired", 403
+        
+       
+        get_sb().table("pdf_views").insert({
+            "token": token,
+            "deal_id": info.get("deal_id"),
+            "time": datetime.now(timezone.utc).isoformat(),
+            "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+            "agent": request.headers.get("User-Agent", "")[:500]
+        }).execute()
+        
+      
+        get_sb().table("pdf_links")\
+            .update({"views": info.get("views", 0) + 1})\
+            .eq("token", token)\
+            .execute()
+        
+        log.info(f"PDF viewed: {token} (view #{info.get('views', 0) + 1})")
+        
+    
+        return send_file(
+            info["pdf_path"],
+            mimetype="application/pdf",
+            as_attachment=False,
+            max_age=0
+        )
+        
+    except Exception as e:
+        log.exception(f"Failed to serve PDF: {token}")
+        abort(500)
+
+
+@bp.get("/stats/<token>")
+def pdf_stats(token: str):
+    try:
+       
+        link = get_sb().table("pdf_links").select("*").eq("token", token).single().execute()
+        
+        
+        views = get_sb().table("pdf_views").select("*").eq("token", token)\
+            .order("time", desc=True).execute()
+        
+        if not link.data:
+            return jsonify({"error": "Not found"}), 404
+        
+        unique_ips = len(set(v["ip"] for v in views.data))
+        
+        return jsonify({
+            "token": token,
+            "recipient": link.data.get("recipient"),
+            "total_views": link.data.get("views", 0),
+            "unique_ips": unique_ips,
+            "created": link.data["created"],
+            "expires": link.data["expires"],
+            "last_view": views.data[0]["time"] if views.data else None,
+            "recent_views": views.data[:10]  
+        })
+        
+    except Exception as e:
+        log.exception("Stats failed")
+        return jsonify({"error": str(e)}), 500
 
 @bp.post("/wrap")
 def api_wrap():
@@ -1792,16 +2066,7 @@ def api_wrap():
     if not f:
         return jsonify({"error": "missing file"}), 400
 
-    # ----------------------------
-    # Helpers
-    # ----------------------------
     def _get_or_create_tracking_id():
-        """
-        Stable tracking_id resolution order:
-        1) request.form['tracking_id'] (if client supplied)
-        2) session['tracking_id'] (sticky within user session)
-        3) generate a new UUID4 and store in session
-        """
         tid = (request.form.get("tracking_id") or "").strip()
         if not tid:
             tid = (session.get("tracking_id") or "").strip()
@@ -1811,48 +2076,33 @@ def api_wrap():
         return tid
 
     def _normalize(t: str) -> str:
-        """
-        - Unify aliases to canonical placeholders
-        - Keep {fp} as-is (wrapper will fill fingerprint)
-        - Do NOT stamp deal IDs visibly
-        """
         if not t:
             return ""
-        # normalize double braces -> single
+        
         t = t.replace("{{", "{").replace("}}", "}")
-        # aliases -> canonical
         t = re.sub(r"{\s*(lender|lender_name|funder_name)\s*}", "{funder}", t, flags=re.I)
         t = re.sub(r"{\s*(email|recipient|to_email)\s*}", "{recipient}", t, flags=re.I)
         t = re.sub(r"{\s*(tracking_id|tracking)\s*}", "{tracking}", t, flags=re.I)
-        # explicitly DO NOT replace {fp}; wrapper fills it
-        # strip literal "Deal #" and deal tokens from visible text
+        
         t = re.sub(r"{\s*(deal|deal_id)\s*}", "", t, flags=re.I)
         t = re.sub(r"(?:^|\s)[•\-\u2022]?\s*Deal\s*#\s*", " ", t, flags=re.I)
         return t
 
     def _safe_resolve_known_tokens(t: str, vals: dict) -> str:
-        """
-        Only replace {funder}, {recipient}, {user}, {tracking}.
-        Leave unknown tokens like {fp} intact so the wrapper can fill them.
-        """
         if not t:
             return ""
         def rep(m):
             key = m.group(1).strip().lower()
             if key in ("funder", "recipient", "user", "tracking"):
                 return str(vals.get(key, ""))
-            # leave anything else (e.g., fp) untouched
+            
             return "{" + key + "}"
         return re.sub(r"{\s*([a-zA-Z0-9_]+)\s*}", rep, t)
 
-    # ----------------------------
-    # Save upload
-    # ----------------------------
+
     saved = _save_upload(f, prefix="wrap")
 
-    # ----------------------------
-    # Context
-    # ----------------------------
+
     ctx = {
         "lender": (request.form.get("lender") or "").strip(),
         "email":  (request.form.get("recipient_email")
@@ -1868,9 +2118,7 @@ def api_wrap():
     deal_id = int(deal_id_raw) if deal_id_raw.isdigit() else None
     tracking_id = _get_or_create_tracking_id()
 
-    # ----------------------------
-    # Incoming texts (defaults include tracker + fp)
-    # ----------------------------
+
     wm_in = (request.form.get("force_watermark_text")
              or request.form.get("watermark_text")
              or "SENT VIA PATHWAY CATALYST • Track {tracking}").strip()
@@ -1879,9 +2127,7 @@ def api_wrap():
              or request.form.get("footer_text")
              or "Submitted to {funder} by {recipient} • Track {tracking}").strip()
 
-    # ----------------------------
-    # Already wrapped?
-    # ----------------------------
+    
     name_up = (f.filename or "").strip()
     name_saved = (saved.get("filename") or "").strip()
     already_wrapped = bool(
@@ -1889,9 +2135,7 @@ def api_wrap():
         re.search(r"(?:\.wrapped\.pdf|-\s*wrapped\.pdf)$", name_saved, flags=re.I)
     )
 
-    # ----------------------------
-    # Normalize + resolve (leave {fp} for wrapper)
-    # ----------------------------
+    
     ft_norm = _normalize(ft_in)
     wm_norm = _normalize(wm_in)
 
@@ -1905,27 +2149,24 @@ def api_wrap():
     ft_resolved = _safe_resolve_known_tokens(ft_norm, vals)
     wm_resolved = _safe_resolve_known_tokens(wm_norm, vals)
 
-    # ----------------------------
-    # Prefer production wrapper (if lender present and not already wrapped)
-    # ----------------------------
+  
     try:
         if ctx["lender"] and not already_wrapped and deal_id is not None:
             import wrappers
-            info = wrappers.issue_wrapper_user_branded(
+            info = wrappers.issue_tamper_proof_wrapper(
                 user_id=(session.get("google_email") or session.get("user_id") or "demo-user"),
-                deal_id=deal_id, 
+                deal_id=deal_id,
                 original_pdf_path=saved["path"],
                 funder_name=ctx["lender"],
                 recipient_email=ctx["email"],
                 storage_dir=str(UPLOAD_DIR),
                 supabase_url=SUPABASE_URL,
                 supabase_service_key=SUPABASE_SERVICE_ROLE,
-                # pass fully RESOLVED strings so lender/email/tracking are baked in;
-                # leave {fp} so wrapper can fill fingerprint on render
+               
+                tracking_id=tracking_id,
+               
                 force_watermark_text=wm_resolved,
                 force_footer_template=ft_resolved,
-                # NEW: ensure stable fingerprint derivation in wrapper
-                force_tracking_id=tracking_id,
             )
             out_path = info["wrapper_path"]
             return send_file(
@@ -1936,16 +2177,29 @@ def api_wrap():
                 max_age=0,
             )
     except Exception as e:
-        log.exception("issue_wrapper_user_branded failed; falling back: %s", e)
+        log.exception("issue_tamper_proof_wrapper failed; falling back: %s", e)
 
-    # ----------------------------
-    # Fallback (simple wrapper; uses resolved text as-is)
-    # ----------------------------
+  
     if already_wrapped:
         wrapped = saved
     else:
         wrapped = _wrap_upload(saved, footer_text=ft_resolved, watermark_text=wm_resolved)
-
+  
+    if request.form.get("return_link") == "true":
+        link_resp = requests.post(
+            f"{request.host_url}pdf/link",
+            json={
+                "pdf_path": wrapped["path"],
+                "recipient_email": ctx["email"],
+                "deal_id": deal_id
+            }
+        )
+        
+        return jsonify({
+            "success": True,
+            "link": link_resp.json()["link"],
+            "message": "Send this link instead of attaching PDF"
+        })
     return send_file(
         wrapped["path"],
         mimetype="application/pdf",
@@ -1953,3 +2207,850 @@ def api_wrap():
         download_name=wrapped["filename"],
         max_age=0,
     )
+
+@bp.post("/wrap-secure")
+@bp.post("/wrap-secure/")
+def api_wrap_secure():
+    file = request.files.get("file")
+    recipient_email = request.form.get("email")
+    recipient_name = request.form.get("name")
+    deal_id = request.form.get("deal_id")
+
+    if not file or not recipient_email:
+        return jsonify({"error": "Missing PDF or recipient email"}), 400
+    
+   
+    temp_path = os.path.join("/tmp", f"{uuid.uuid4()}.pdf")
+    file.save(temp_path)
+
+    wrapped_path, fingerprint_id = wrap_pdf_secure(temp_path, recipient_email)
+
+  
+    tracking_id = str(uuid.uuid4())
+
+    
+    base_url = os.getenv("BASE_URL", "https://lxqsswgqugwszhovfsxw.functions.supabase.co")
+    view_link = f"{base_url}/view-pdf?token={secure_token}"
+
+
+    supabase.table("pdf_links").insert({
+        "tracking_id": tracking_id,
+        "recipient_email": recipient_email,
+        "fingerprint_id": fingerprint_id,
+        "deal_id": deal_id,
+        "created_at": datetime.datetime.utcnow().isoformat(),
+        "expires_at": (datetime.datetime.utcnow() + datetime.timedelta(days=30)).isoformat(),
+        "view_link": view_link,
+        "status": "created",
+        "pdf_path": wrapped_path,
+    }).execute()
+
+    send_secure_document_email(
+        recipient_email=recipient_email,
+        recipient_name=recipient_name or "",
+        pdf_path=wrapped_path,
+        tracking_id=tracking_id,
+        view_link=view_link,
+    )
+
+    return jsonify({
+        "message": "Secure document sent successfully.",
+        "tracking_id": tracking_id,
+        "view_link": view_link
+    }), 200
+
+@bp.post("/send")
+def send_emails_secure():
+    """
+    COMBINED FUNCTIONALITY: Sends emails to multiple lenders with tamper-proof PDF protection.
+    
+    This function combines:
+    1. send_emails(): Bulk sending, tracking, deal management
+    2. api_wrap_secure(): Tamper-proof PDF wrapping and secure view links
+    
+    JSON Payload:
+    {
+      "selected_lenders": [...],           # List of lender names
+      "subject": "...",                     # Email subject
+      "message": "...",                     # Email body (HTML)
+      "cc": [...],                          # CC recipients
+      "mode": "MCA|CCS|REV|SBA|RE|EQP",    # Deal type
+      "application": {...},                 # Application data
+      "statements": {...},                  # Statement data
+      "attachments": [{name, data}, ...],   # Base64 attachments
+      "per_lender_attachments": {...},      # Per-lender specific attachments
+      "parent_deal_id": 123,                # Optional parent deal
+      "exclude": ["LenderA"],               # Optional exclusions
+      "use_secure_links": true,             # NEW: Enable secure link mode
+      "wrap_pdfs": true,                    # NEW: Enable tamper-proof wrapping
+      "link_expiry_days": 30                # NEW: Link expiration (default 30)
+    }
+    
+    Returns:
+    {
+      "ok": true,
+      "from": "sender@example.com",
+      "deal_id": 123,
+      "subject": "...",
+      "deliveries": [
+        {
+          "lender": "Lender Name",
+          "from": "sender@example.com",
+          "to": "lender@example.com",
+          "cc": [...],
+          "status": "sent|error",
+          "provider": "gmail|outlook",
+          "provider_id": "...",
+          "tracking_id": "...",            # NEW: Unique tracking ID
+          "view_link": "...",              # NEW: Secure view link (if enabled)
+          "fingerprint_id": "...",         # NEW: PDF fingerprint (if wrapped)
+          "reason": "..."                   # Error reason if status=error
+        }
+      ]
+    }
+    """
+    log.info("=" * 70)
+    log.info("🚀 send_emails_secure() CALLED")
+    log.info("=" * 70)
+    try:
+        
+        data = request.get_json(force=True) or {}
+        log.info(f"📦 Data keys: {list(data.keys())}")
+        log.info(f"📧 Selected lenders: {data.get('selected_lenders', [])}")
+        log.info(f"🔒 wrap_pdfs: {data.get('wrap_pdfs', False)}")
+        log.info(f"🔗 use_secure_links: {data.get('use_secure_links', False)}")
+        selected = data.get("selected_lenders") or []
+        subject = data.get("subject") or ""
+       #body = data.get("message") or ""
+        user_message = data.get("message") or ""
+        user_cc = data.get("cc") or []
+        mode = (data.get("mode") or "").upper() or "MCA"
+        
+        
+        use_secure_links = data.get("use_secure_links", False)
+        wrap_pdfs = data.get("wrap_pdfs", False)
+        link_expiry_days = data.get("link_expiry_days", 30)
+        
+        application_obj = data.get("application") or {}
+        statements_obj = data.get("statements") or {}
+        business_name =  application_obj.get("business_name") or data.get("application_name") or "App and Bank Statements"
+        attachments_global = _parse_attachments_from_json(data)
+        per_map = _parse_per_lender_attachments_from_json(data)
+        
+        if isinstance(user_cc, str):
+            user_cc = [x.strip() for x in user_cc.split(",") if x.strip()]
+        
+        if not selected:
+            return jsonify({"error": "No lenders selected"}), 400
+        
+    
+        sender_email, provider, token = safe_get_connected_sender()
+        if not sender_email or not token:
+            return jsonify({"error": "No connected mailbox. Connect Gmail/Outlook first."}), 403
+        
+
+        deal_id = record_deal(
+            session.get("google_email") or "demo-user",
+            sender_email, subject, user_message, mode,
+            application_json=application_obj,
+            statements_json=statements_obj
+        )
+        
+        final_subject = _default_subject(application_obj.get("business_name"), deal_id, subject)
+        if final_subject != subject:
+            try:
+                sb.table("deals").update({"subject": final_subject}).eq("id", deal_id).execute()
+            except Exception:
+                pass
+        
+     
+        exclude = set([(s or "").strip().lower() for s in (data.get("exclude") or []) if s])
+        parent_deal_id = data.get("parent_deal_id")
+        if parent_deal_id and not exclude:
+            try:
+                resp = sb.table("deliveries").select("lender_name").eq("deal_id", int(parent_deal_id)).execute()
+                names = [(r.get("lender_name") or "").strip().lower() for r in (resp.data or [])]
+                exclude = set([n for n in names if n])
+            except Exception:
+                pass
+        
+       
+        deliveries = []
+        prov = (provider or "").lower()
+        docs_base = os.getenv(
+         "DOCS_BASE_URL",
+        "https://lxqsswgqugwszhovfsxw.functions.supabase.co",
+        )
+        
+        for lender in selected:
+            lname = (lender or "").strip()
+            lname_key = lname.lower()
+            
+            if not lname or lname_key in exclude:
+                continue
+            
+            # Resolve recipients
+            try:
+                to_email, cc_list = resolve_recipients_user_csv_first(lname, user_cc)
+            except Exception as e:
+                log.warning(f"resolve_recipients failed for {lname}: {e}")
+                to_email, cc_list = None, _dedupe_emails(user_cc or [])
+            
+            if not to_email:
+                deliveries.append({
+                    "lender": lname, "from": sender_email, "to": "",
+                    "cc": cc_list, "status": "error", "provider": provider or "",
+                    "reason": "no_recipient"
+                })
+                record_delivery(deal_id, lname, "", cc_list, provider or "", None, "error", sender_email)
+                continue
+            
+          
+            if isinstance(per_map, dict):
+                attachments_for_this = per_map.get(lname) or per_map.get(lname_key) or []
+            elif isinstance(per_map, list):
+                attachments_for_this = per_map
+            else:
+                attachments_for_this = attachments_global
+           
+            from email_preview_system import generate_pdf_preview, build_email_preview_html
+            
+            tracking_id = str(uuid.uuid4())
+            view_links = [] 
+            fingerprint_id = None
+            wrapped_attachments = []
+            body_with_link = user_message  
+            pdf_previews = []  
+            
+            if wrap_pdfs and attachments_for_this:
+                log.info(f"🔒 Wrapping {len(attachments_for_this)} PDFs for {lname}")
+                
+                per_statement_list = statements_obj.get("per_statement") or []
+                statement_name_map = {}
+                for stmt in per_statement_list:
+                    src = stmt.get("source_file") or ""
+                    bank = stmt.get("bank_name") or stmt.get("institution") or ""
+                    period = stmt.get("statement_period") or stmt.get("month") or ""
+                    if bank or period:
+                        statement_name_map[src] = f"{bank}_{period}".strip("_") or src
+                    else:
+                        statement_name_map[src] = os.path.splitext(src)[0] if src else ""
+                
+               
+                for att_idx, att in enumerate(attachments_for_this):
+                    
+                    att_name, att_data = att
+                    log.info(f"   Processing: {att_name}")
+                    
+                    if att_name.lower().endswith(".pdf"):
+                       
+                        temp_path = os.path.join("/tmp", f"{uuid.uuid4()}.pdf")
+                        with open(temp_path, "wb") as f:
+                            f.write(att_data)  
+                        log.info(f"   Wrote {len(att_data)} bytes to {temp_path}")
+                        
+                        
+                        log.info(f"   Calling wrap_pdf_secure for {to_email}")
+                        wrapped_path, fp_id = wrap_pdf_secure(
+                            temp_path,
+                            to_email,
+                            deal_id=deal_id,
+                            #user_id=str(user_id),
+                            #watermark_text=f"CONFIDENTIAL – Sent to {lname} – Deal {deal_id}",
+                            footer_text=f"Submitted  to {lname} via Pathway Catalyst",
+                            logo_path="/Users/maheedharraogovada/Desktop/Paradise again/Statements/static/logo.png",
+                        )
+
+                        fingerprint_id = fp_id
+                        log.info(f"   ✅ Wrapped: {wrapped_path}, fingerprint: {fp_id}")
+                        
+                        preview_b64 = None
+                        try:
+                            log.info(f"   Generating PDF preview for {att_name}...")
+                            preview_b64 = generate_pdf_preview(wrapped_path)
+                            pdf_previews.append({
+                                'name': att_name,
+                                'preview': preview_b64
+                            })
+                            log.info(f"   ✅ Preview generated for {att_name}")
+                        except Exception as preview_error:
+                            log.warning(f"   ⚠️  Preview generation failed for {att_name}: {preview_error}")
+                      
+                        if use_secure_links:
+                          
+                            secure_token = str(uuid.uuid4())
+                            attachments_to_send = []
+                            
+                            now = datetime.utcnow()
+                            expires_dt = now + timedelta(days=link_expiry_days)
+
+                           
+                            this_link = f"{os.getenv('PDF_PROXY_URL', 'https://endpoint-production-a456.up.railway.app')}/docs/{secure_token}"
+                            view_links.append({
+                                "name": att_name,
+                                 "link": this_link
+                            })
+                            log.info(f"   Creating secure link: {view_links}")
+                            
+                            if att_idx == 0:
+                                storage_file_name = f"{business_name}__{lname}__{fp_id}.pdf"
+                            else:
+                               
+                                stmt_name = statement_name_map.get(att_name) or os.path.splitext(att_name)[0]
+                                storage_file_name = f"{stmt_name}__{lname}__{fp_id}.pdf"
+
+
+                            with open(wrapped_path, "rb") as f:
+                                sb.storage.from_("secure-pdfs").upload(
+                                storage_file_name,
+                                f.read(),
+                                {"content-type": "application/pdf"}
+                            )
+
+                            row = {
+                                "token": secure_token,                       
+                                "tracking_id": tracking_id,
+                                "recipient_email": to_email,
+                                "fingerprint_id": fingerprint_id,
+                                "deal_id": deal_id,
+                                "lender_name": lname,
+                                "created_at": now.isoformat(),
+                                "expires_at": expires_dt.isoformat(),
+                                "view_link": (view_links[0]["link"] if view_links else None),
+                                "status": "created",
+                                "pdf_path": storage_file_name,
+                            }
+
+                            log.info(f"   pdf_links row type={type(row)} row={row!r}")
+
+                            
+                            sb.table("pdf_links").insert(row).execute()
+                            log.info("   ✅ Logged to database")
+                        else:
+                           
+                            log.info(f"   Adding wrapped PDF as attachment")
+                            with open(wrapped_path, "rb") as f:
+                                wrapped_attachments.append((att_name, f.read()))
+                        
+                       
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                            log.info(f"   Cleaned up temp file")
+                    else:
+                        
+                        log.info(f"   Passing through: {att_name}")
+                        wrapped_attachments.append(att)
+                
+               
+                if use_secure_links and pdf_previews and view_links:
+   
+                    #first = pdf_previews[0]
+                    previews_html = ""
+                for item in pdf_previews:
+                    previews_html += f"""
+<div style="margin: 18px 0; padding: 14px; background: #fafafa;
+            border: 1px solid #e0e0e0; border-radius: 12px;">
+    
+    <div style="font-size: 15px; margin-bottom: 10px; color:#333;">
+        <strong>📄 Document</strong><br>
+        <span style="font-size:14px;color:#777;">{item['name']}</span>
+    </div>
+
+    <div style="text-align:center;">
+        <img src="data:image/png;base64,{item['preview']}"
+             alt="Preview"
+             style="width: 30%; max-width: 260px; border-radius: 12px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+    </div>
+</div>
+        """
+
+    
+                    links_html = ""
+                    for link_item in view_links:    
+                        links_html += f"""
+        <div style="margin: 6px 0;">
+                <a href="{link_item['link']}" 
+       style="display:inline-block; background:#007bff; color:#fff; 
+              padding:12px 24px; border-radius:6px; text-decoration:none;
+              font-weight:600; font-size:14px;">
+            📥 Download {link_item['name']}
+            </a>
+        </div>
+        """
+
+    
+                    body_with_link = f"""
+<table width="100%" cellpadding="0" cellspacing="0" 
+       style="max-width:620px;margin:auto;
+              font-family:Arial,Helvetica,sans-serif;
+              border:1px solid #e5e5e5;border-radius:14px;
+              overflow:hidden;">
+
+    <!-- Header -->
+    <tr>
+        <td style="background:#111;color:#fff;padding:20px 24px;">
+            <h2 style="margin:0;font-size:22px;font-weight:600;">
+                Harvest Lending X Pathway Catalyst 
+            </h2>
+        </td>
+    </tr>
+
+    <!-- Body -->
+    <tr>
+        <td style="padding:24px;">
+
+            <p style="font-size:15px;color:#333;margin:0 0 12px;">
+                Hi {lname or 'there'},
+            </p>
+
+            <p style="font-size:14px;color:#555;margin:0 0 20px;line-height:1.5;">
+                {user_message}
+            </p>
+
+            <!-- Secure Links -->
+            <div style="margin:20px 0;">
+                {links_html}
+            </div>
+
+            <p style="font-size:13px;color:#777;margin-top:10px;">
+                🔒 Links expire in <strong>{link_expiry_days} days</strong>
+            </p>
+
+            <hr style="margin:28px 0;border:none;border-top:1px solid #ddd;">
+
+            <!-- Previews Section -->
+            <h3 style="margin:0 0 16px;font-size:17px;color:#222;">
+                Document Previews
+            </h3>
+
+            {previews_html}
+
+        </td>
+    </tr>
+
+</table>
+"""
+
+                log.info(f"   ✅ Using HTML preview email with {len(pdf_previews)} PDF previews and {len(view_links)} secure links")
+
+            else:
+                
+                attachments_to_send = attachments_for_this
+                body_to_send = body
+            
+          
+            delivery_tracking_id = str(uuid.uuid4())
+            body_to_send = body_with_link
+            email_tracking_id = str(uuid.uuid4())
+
+            body_with_pixel = _inject_tracking_pixel(
+                body_html=body_to_send,
+                tracking_id=email_tracking_id,
+                deal_id=deal_id,
+                lender_name=lname,
+            )
+
+
+            ok, provider_id, thread_id = False, None, None
+            if prov == "gmail":
+                ok, provider_id, thread_id = gmail_send(
+                    token, final_subject, body_with_pixel,
+                    sender_email, to_email, cc_list,
+                    attachments=attachments_to_send,
+                )
+            elif prov in ("outlook", "graph"):
+                ok, provider_id, thread_id = graph_send(
+                    token, final_subject, body_with_pixel,
+                    sender_email, to_email, cc_list,
+                    attachments=attachments_to_send,
+                )
+            else:
+                ok = False
+                provider_id = f"unsupported_provider:{provider}"
+            
+            status = "sent" if ok else "error"
+            reason = None if ok else (provider_id if isinstance(provider_id, str) else "send_failed")
+            
+          
+            delivery_record = {
+                "lender": lname,
+                "from": sender_email,
+                "to": to_email,
+                "cc": cc_list,
+                "status": status,
+                "provider": provider or "",
+                "provider_id": None if not ok else provider_id,
+                "tracking_id": tracking_id,  
+                "view_link": (view_links[0]["link"] if view_links else None),      
+                "fingerprint_id": fingerprint_id,  
+                "reason": reason
+            }
+            deliveries.append(delivery_record)
+            
+            try:
+                record_delivery(
+                    deal_id, lname, to_email, cc_list, provider or "",
+                    (None if not ok else provider_id), status, sender_email,
+                    tracking_id=delivery_tracking_id,thread_id=thread_id
+                )
+            except Exception:
+                pass
+        
+        
+        return jsonify({
+            "ok": True,
+            "from": sender_email,
+            "deal_id": deal_id,
+            "subject": final_subject,
+            "deliveries": deliveries,
+            "security_features": {
+                "secure_links_enabled": use_secure_links,
+                "pdf_wrapping_enabled": wrap_pdfs,
+                "link_expiry_days": link_expiry_days
+            }
+        })
+        
+    except Exception as e:
+        log.exception("send_emails_secure failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.get("/analytics/<tracking_id>")
+def analytics_by_tracking(tracking_id):
+    rows = supabase.table("pdf_views").select("*").eq("tracking_id", tracking_id).order("viewed_at").execute().data or []
+    return jsonify({
+        "tracking_id": tracking_id,
+        "total_views": len(rows),
+        "unique_visitors": len({r.get("fingerprint") for r in rows}),
+        "views": rows
+    })
+
+@bp.get("/analytics/deal/<deal_id>")
+def analytics_by_deal(deal_id):
+    links = supabase.table("pdf_links").select("tracking_id,recipient_email,view_link,created_at,expires_at").eq("deal_id", deal_id).execute().data or []
+    out = []
+    for l in links:
+        v = supabase.table("pdf_views").select("*").eq("tracking_id", l["tracking_id"]).order("viewed_at").execute().data or []
+        out.append({
+            "tracking_id": l["tracking_id"],
+            "recipient_email": l["recipient_email"],
+            "view_link": l["view_link"],
+            "total_views": len(v),
+            "unique_visitors": len({r.get("fingerprint") for r in v}),
+            "first_viewed": v[0]["viewed_at"] if v else None,
+            "last_viewed": v[-1]["viewed_at"] if v else None
+        })
+    return jsonify({"deal_id": deal_id, "documents": out})
+"""
+@bp.get("/v/<secure_token>")
+def view_secure_pdf(secure_token):
+    try:
+        # 1. Find link entry
+        resp = sb.table("pdf_links").select("*").eq("token", secure_token).execute()
+        rows = resp.data or []
+        if not rows:
+            return "Invalid or expired link.", 404
+
+        row = rows[0]
+
+        # 2. Validate expiration
+        expires_at = datetime.fromisoformat(row["expires_at"])
+        if datetime.utcnow() > expires_at:
+            return "This secure document link has expired.", 410
+
+        # 3. Path inside Supabase Storage (saved earlier)
+        storage_path = row["pdf_path"]   # e.g. secure-pdfs/abcd1234.pdf
+
+        # 4. Create short-lived signed URL (15 minutes)
+        signed = sb.storage.from_("secure-pdfs").create_signed_url(
+            storage_path,
+            60 * 15   # link is valid 15 minutes after click
+        )
+        secure_pdf_url = signed["signedURL"]
+
+        # 5. Optional: record access analytics for your admin system
+        try:
+            sb.table("pdf_links").update({
+                "last_accessed_at": datetime.utcnow().isoformat(),
+                "access_count": (row.get("access_count") or 0) + 1
+            }).eq("token", secure_token).execute()
+        except:
+            pass
+
+        # 6. Redirect user to short-lived Supabase URL
+        return redirect(secure_pdf_url)
+
+    except Exception as e:
+        log.exception("secure_link_viewer failed")
+        return f"Error: {str(e)}", 500
+
+@bp.get("/download/<token>")
+def download_pdf(token: str):
+    try:
+        result = get_sb().table("pdf_links").select("*").eq("token", token).single().execute()
+        if not result.data:
+            abort(404)
+        
+        info = result.data
+        
+        # Check expiry
+        expires = datetime.fromisoformat(info["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires:
+            return "Link expired", 403
+        
+        # Log download
+        get_sb().table("pdf_downloads").insert({
+            "token": token,
+            "tracking_id": info.get("tracking_id"),
+            "deal_id": info.get("deal_id"),
+            "business_name": info.get("business_name"), 
+            "lender_name": info.get("lender_name"), 
+            "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+            "user_agent": request.headers.get("User-Agent", "")[:500],
+            "downloaded_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+        
+        # Serve as attachment (triggers download)
+        return send_file(
+            info["pdf_path"],
+            mimetype="application/pdf",
+            as_attachment=True,  # <-- key difference
+            download_name=info.get("filename", "document.pdf")
+        )
+        
+    except Exception as e:
+        log.exception(f"Failed to download PDF: {token}")
+        abort(500)
+"""
+@bp.get("/v/<secure_token>")
+def view_secure_pdf(secure_token):
+    """View PDF inline - proxies through backend for tracking"""
+    try:
+        
+        resp = sb.table("pdf_links").select("*").eq("token", secure_token).execute()
+        rows = resp.data or []
+        if not rows:
+            return "Invalid or expired link.", 404
+
+        row = rows[0]
+
+        
+        expires_at = datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires_at:
+            return "This secure document link has expired.", 410
+
+       
+        storage_path = row["pdf_path"]
+
+        
+        signed = sb.storage.from_("secure-pdfs").create_signed_url(
+            storage_path,
+            60  
+        )
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+        
+        if not signed_url:
+            log.error(f"Failed to get signed URL for {storage_path}")
+            return "Failed to retrieve document.", 500
+
+        
+        pdf_response = requests.get(signed_url)
+        if pdf_response.status_code != 200:
+            log.error(f"Failed to fetch PDF: {pdf_response.status_code}")
+            return "Failed to retrieve document.", 500
+        
+        pdf_bytes = pdf_response.content
+
+      
+        try:
+            sb.table("pdf_views").insert({
+                "token": secure_token,
+                "tracking_id": row.get("tracking_id"),
+                "deal_id": row.get("deal_id"),
+                "lender_name": row.get("lender_name"),
+                "recipient_email": row.get("recipient_email"),
+                "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+                "user_agent": request.headers.get("User-Agent", "")[:500],
+                "viewed_at": datetime.now(timezone.utc).isoformat(),
+            }).execute()
+            log.info(f"📊 Logged view: {row.get('lender_name')} - {row.get('recipient_email')}")
+        except Exception as e:
+            log.warning(f"Failed to log view: {e}")
+
+        
+        try:
+            sb.table("pdf_links").update({
+                "last_accessed_at": datetime.now(timezone.utc).isoformat(),
+                "access_count": (row.get("access_count") or 0) + 1
+            }).eq("token", secure_token).execute()
+        except:
+            pass
+
+        
+        return send_file(
+            BytesIO(pdf_bytes),
+            mimetype="application/pdf",
+            as_attachment=False
+        )
+
+    except Exception as e:
+        log.exception("view_secure_pdf failed")
+        return f"Error: {str(e)}", 500
+
+
+@bp.get("/download/<token>")
+def download_pdf(token: str):
+    """Download PDF as attachment - proxies through backend for tracking"""
+    try:
+        
+        result = sb.table("pdf_links").select("*").eq("token", token).execute()
+        rows = result.data or []
+        if not rows:
+            abort(404)
+        
+        info = rows[0]
+        
+        
+        expires = datetime.fromisoformat(info["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires:
+            return "Link expired", 403
+        
+        
+        storage_path = info["pdf_path"]
+
+       
+        signed = sb.storage.from_("secure-pdfs").create_signed_url(
+            storage_path,
+            60  
+        )
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+        
+        if not signed_url:
+            log.error(f"Failed to get signed URL for {storage_path}")
+            abort(500)
+
+        
+        pdf_response = requests.get(signed_url)
+        if pdf_response.status_code != 200:
+            log.error(f"Failed to fetch PDF: {pdf_response.status_code}")
+            abort(500)
+        
+        pdf_bytes = pdf_response.content
+
+      
+        try:
+            sb.table("pdf_downloads").insert({
+                "token": token,
+                "tracking_id": info.get("tracking_id"),
+                "deal_id": info.get("deal_id"),
+                "lender_name": info.get("lender_name"),
+                "recipient_email": info.get("recipient_email"),
+                "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+                "user_agent": request.headers.get("User-Agent", "")[:500],
+                "downloaded_at": datetime.now(timezone.utc).isoformat(),
+            }).execute()
+            log.info(f"📥 Logged download: {info.get('lender_name')} - {info.get('recipient_email')}")
+        except Exception as e:
+            log.warning(f"Failed to log download: {e}")
+
+        
+        try:
+            sb.table("pdf_links").update({
+                "last_accessed_at": datetime.now(timezone.utc).isoformat(),
+                "access_count": (info.get("access_count") or 0) + 1
+            }).eq("token", token).execute()
+        except:
+            pass
+        
+        
+        filename = info.get("filename") or f"{info.get('lender_name', 'document')}.pdf"
+        return send_file(
+            BytesIO(pdf_bytes),
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        log.exception(f"Failed to download PDF: {token}")
+        abort(500)
+
+
+@bp.get("/analytics/downloads/<tracking_id>")
+def download_analytics(tracking_id):
+    rows = supabase.table("pdf_downloads").select("*").eq("tracking_id", tracking_id).order("downloaded_at").execute().data or []
+    return jsonify({
+        "tracking_id": tracking_id,
+        "total_downloads": len(rows),
+        "unique_ips": len({r.get("ip") for r in rows}),
+        "downloads": rows
+    })
+
+@bp.route("/api/feedback/reply", methods=["POST"])
+def feedback_reply():
+    """
+    Handle inline replies from the Feedback Hub.
+    FormData fields:
+      - deal_id
+      - lender_name
+      - status_context  ("approved" | "stips" | "declined")
+      - to              (single or comma-separated; UI allows multiple)
+      - body
+      - files[]         (0..n attachments)
+    """
+    try:
+        deal_id = request.form.get("deal_id")
+        lender_name = request.form.get("lender_name")
+        status_context = request.form.get("status_context")
+        to_raw = request.form.get("to", "")
+        body = request.form.get("body", "")
+
+        # Allow multiple addresses separated by comma/semicolon/space
+        to_addresses = [
+            addr.strip()
+            for chunk in to_raw.replace(";", ",").split(",")
+            for addr in [chunk.strip()]
+            if addr
+        ]
+
+        files = request.files.getlist("files")
+
+        app.logger.info(
+            "📩 /api/feedback/reply: deal=%s lender=%s status=%s to=%s files=%s",
+            deal_id,
+            lender_name,
+            status_context,
+            to_addresses,
+            [f.filename for f in files],
+        )
+
+        # TODO: validate inputs
+        if not deal_id or not lender_name or not to_addresses or not body:
+            return jsonify({"error": "Missing required fields"}), 400
+
+        # TODO: send email using your existing Gmail/Graph helper
+        # send_lender_reply_email(
+        #     deal_id=deal_id,
+        #     lender_name=lender_name,
+        #     to_addresses=to_addresses,
+        #     body=body,
+        #     attachments=files,
+        #     status_context=status_context,
+        # )
+
+        # TODO: log this reply in Supabase (email_responses / manual_review / activity)
+        # log_feedback_reply(
+        #     deal_id=deal_id,
+        #     lender_name=lender_name,
+        #     status_context=status_context,
+        #     to_addresses=to_addresses,
+        #     body=body,
+        #     attachment_names=[f.filename for f in files],
+        # )
+
+        return jsonify({"ok": True}), 200
+
+    except Exception as e:
+        app.logger.exception("❌ /api/feedback/reply failed: %s", e)
+        return jsonify({"error": str(e)}), 500

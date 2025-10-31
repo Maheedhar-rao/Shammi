@@ -1,0 +1,105 @@
+/* Base styles, CSS variables, and resets */
+
+:root {
+  --bg: #f7f9fc;
+  --card: #fff;
+  --text: #111;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --brand: #2563eb;
+  --ok: #065f46;
+  --warn: #92400e;
+  --err: #7f1d1d;
+  --overlay: rgba(17, 24, 39, 0.45);
+  --dot-green: #16a34a;
+  --dot-gray: #9ca3af;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+h1 {
+  margin: 0 0 16px;
+  font-size: 22px;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+h4 {
+  margin: 10px 0 6px;
+  font-size: 14px;
+}
+
+/* Layout utilities */
+.hidden {
+  display: none !important;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.row-tight {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.grid {
+  display: grid;
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Typography utilities */
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.muted-sm {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+/* Visually hidden (accessibility) */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+}
+
+/* Table utilities */
+.table-wrap {
+  overflow-x: auto;
+}

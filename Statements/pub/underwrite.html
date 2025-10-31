@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CROC Underwrite</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- CSS Files -->
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/underwrite.css" />
+</head>
+<body>
+  <div class="topbar">
+    <h1>Upload Application and Bank Statements</h1>
+    <div class="gmail-status">
+      <span id="gmailDot" class="dot" aria-hidden="true"></span>
+      <span id="gmailText">Checking Gmail…</span>
+      <div class="gmail-actions">
+        <button id="btnConnectGmail" class="btn-light">Connect Gmail</button>
+        <button id="btnDisconnectGmail" class="btn-ghost hidden">Disconnect</button>
+        <input id="emailsCSV" type="file" accept=".csv,text/csv" class="visually-hidden"/>
+        <button id="btnUploadEmails" class="btn-ghost">Upload emails.csv</button>
+        <span id="emailsStatus" class="muted" style="margin-left:6px;"></span>
+        <button id="btnLogout" class="btn-ghost">Logout</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="productSwitch">
+    <div class="tile-grid">
+      <a class="tile" id="btnMCA" href="underwrite.html">
+        <div class="name">Merchant Cash Advance</div>
+        <div class="meta">Start underwriting</div>
+      </a>
+      <div class="tile alt1" id="btnCCS">
+        <div class="name">Credit Card Split</div>
+        <div class="meta">Processor statements</div>
+      </div>
+      <div class="tile alt2" id="btnReverse">
+        <div class="name">Reverse</div>
+        <div class="meta">Bank statements</div>
+      </div>
+      <div class="tile alt3" id="btnDashboard">
+        <div class="name">Dashboard</div>
+        <div class="meta">Deals & Replies</div>
+      </div>
+      <div class="tile alt4" id="btnOpportunities">
+        <div class="name">Opportunities</div>
+        <div class="meta">Move Leads to Modes</div>
+      </div>
+      <div class="tile alt4" id="btnLeads">
+        <div class="name">Leads</div>
+        <div class="meta">Leads and Applications</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1 - Application (MCA only) -->
+  <div class="card" id="cardApp">
+    <div class="row-tight">
+      <h2 id="appTitle" style="margin:0">Application</h2>
+      <div class="muted">PDF only</div>
+    </div>
+    <div class="row">
+      <div>
+        <label id="appLabel">Application PDF</label>
+        <input id="application" type="file" accept="application/pdf" class="visually-hidden" />
+        <div id="appDrop" class="dropzone" tabindex="0" role="button" aria-label="Drop application PDF or click to pick">
+          <span class="dz-title">Upload application</span>
+          <span class="dz-sub">Drag a PDF here, or</span>
+          <div class="dz-actions"><span class="btn-pick">Choose PDF</span></div>
+        </div>
+        <div id="appPreview" class="file-list"></div>
+      </div>
+      <div class="actions" style="align-items:flex-end;">
+        <button id="btnAppExtract">Extract Application</button>
+        <span id="appStatus" class="muted"></span>
+      </div>
+    </div>
+
+    <div id="appDetails" class="grid hidden" style="margin-top:14px;">
+      <h3>Extracted Details</h3>
+      <div class="kvs" id="kvContainer"></div>
+
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>Business State</label>
+          <input id="state" type="text" placeholder="NY, CA, NJ..." maxlength="2" />
+          <div class="muted">If NY or CA, you'll be asked for 4 months of statements. Others require 3.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 - Upload Statements -->
+  <div class="card" id="cardStatements">
+    <div class="row-tight">
+      <h2 id="stmtTitle" style="margin:0">Statements & Matrix</h2>
+      <div class="muted">PDFs only</div>
+    </div>
+    <div class="row">
+      <div>
+        <label id="stmtLabel">Bank Statements (PDFs)</label>
+        <input id="statements" type="file" accept="application/pdf" multiple class="visually-hidden" />
+        <div id="stmtDrop" class="dropzone" tabindex="0" role="button" aria-label="Drop statement PDFs or click to pick">
+          <span class="dz-title">Upload bank statements</span>
+          <span class="dz-sub">Drag one or more PDFs here, or</span>
+          <div class="dz-actions"><span class="btn-pick">Choose PDF(s)</span></div>
+        </div>
+        <div id="stmtsPreview" class="file-list"></div>
+        <div class="muted" id="stmtHint" style="margin-top:6px;">Upload 3 months. If the state is NY/CA, upload 4 months.</div>
+      </div>
+      <div class="actions" style="align-items:flex-end;">
+        <button id="btnStmtsMatch">Analyze & Match</button>
+        <span id="posBadge" class="muted"></span>
+        <span id="stmtStatus" class="muted"></span>
+      </div>
+    </div>
+    <div id="stmtHelp" class="note-warn hidden" style="margin-top:10px;">
+      If nothing appears after analyzing, make sure <strong>Poppler</strong> and <strong>Tesseract</strong> are installed.
+    </div>
+  </div>
+
+  <!-- Statement Analysis (MCA only) -->
+  <div id="stmtAnalysis" class="card hidden">
+    <h3>Statement Analysis</h3>
+    <div id="stmtAgg" class="kvs" style="margin-bottom:12px;"></div>
+    <table id="stmtTable">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Bank</th>
+          <th>Account</th>
+          <th class="right">Avg Daily Balance</th>
+          <th class="right">Neg Days</th>
+          <th class="right">Credits</th>
+          <th class="right">Debits</th>
+          <th class="right">Deposits (excl Zelle)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="stmtEmpty" class="note-err hidden" style="margin-top:12px;">
+      No statement data parsed. Check PDFs and Poppler/Tesseract setup.
+    </div>
+  </div>
+
+  <!-- Lender Tiles -->
+  <div id="results" class="card hidden">
+    <div class="tiles-toolbar">
+      <h3 style="margin:0" id="resultsTitle">Suggested Lenders</h3>
+      <div class="muted" id="selectedCount">0 selected</div>
+    </div>
+    <div id="lendersGrid" class="tile-grid"></div>
+  </div>
+
+  <!-- Composer -->
+  <div id="composer" class="card hidden">
+    <h3>Compose & Send</h3>
+    <div class="row">
+      <div>
+        <label>Subject</label>
+        <input id="subject" type="text" placeholder="Submission for [Business Name]" />
+      </div>
+      <div></div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>Message</label>
+      <textarea id="message" placeholder="Write something to the lenders..."></textarea>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>CC (optional, comma separated)</label>
+      <input id="cc" type="text" placeholder="cc1@x.com, cc2@y.com" />
+    </div>
+
+    <div class="actions" style="margin-top:16px">
+      <button id="btnSend">Send</button>
+      <span id="sendStatus" class="muted"></span>
+    </div>
+  </div>
+
+  <!-- Opportunities -->
+  <div id="opportunities" class="card hidden">
+    <h2 style="margin-bottom:12px;">Opportunities</h2>
+    <div id="opportunitiesContent"></div>
+  </div>
+
+  <!-- Leads -->
+  <div id="leads" class="card hidden"></div>
+
+  <!-- Dashboard -->
+  <div id="dashboard" class="card hidden">
+    <div class="tiles-toolbar" style="gap:12px; align-items:center;">
+      <div style="display:flex; align-items:center; gap:10px; flex:1 1 auto;">
+        <h2 style="margin:0">Dashboard</h2>
+        <div id="dashSummary" class="muted"></div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:12px;">
+        <input id="dealSearch" type="text" placeholder="Search deals…"
+               style="width:220px; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px;">
+
+        <div id="pager" class="muted-sm" style="display:flex; align-items:center; gap:8px;">
+          <button id="pagePrev" class="btn-ghost" title="Previous page">Prev</button>
+          <span id="pageInfo">—</span>
+          <button id="pageNext" class="btn-ghost" title="Next page">Next</button>
+          <select id="pageSize" title="Rows per page"
+                  style="padding:6px 8px; border:1px solid #d1d5db; border-radius:8px;">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:10px">
+      <button id="dashRefresh" class="btn-ghost">Refresh</button>
+    </div>
+
+    <table id="dealsTable">
+      <thead>
+        <tr>
+          <th>Deal ID</th>
+          <th>Mode</th>
+          <th>Business Name</th>
+          <th>Sender</th>
+          <th>Sent/Err/Skip/Total</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody id="dealsTbody"></tbody>
+    </table>
+
+    <div id="dealsEmpty" class="note-err hidden" style="margin-top:10px;">
+      No deals yet.
+    </div>
+
+    <div id="dealModal" class="modal-overlay" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dealTitle">
+        <h3 id="dealTitle">Deal</h3>
+        <div id="dealBody" class="grid"></div>
+        <div class="buttons" style="margin-top:14px;">
+          <button id="dealResend" class="btn-light">Resubmit</button>
+          <button id="dealClose" class="btn-neutral">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- POSITION MODAL (MCA only) -->
+  <div id="positionModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="posTitle">
+      <h3 id="posTitle">Current MCA Position</h3>
+      <span class="muted">Tell us the <strong>current position</strong> for this business. We'll only show lenders that support that position.</span>
+      <div class="row-compact">
+        <div>
+          <label for="posInput">Enter a number (1, 2, 3…)</label>
+          <input id="posInput" type="text" inputmode="numeric" placeholder="e.g., 3" />
+          <div id="posError" class="error-text"></div>
+        </div>
+        <button id="posConfirm" style="height: 40px;">Confirm</button>
+      </div>
+      <div class="buttons">
+        <button id="posCancel" class="btn-neutral">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEEDBACK HUB - Comprehensive Deal Management -->
+  <div id="feedbackHub" class="modal-overlay hidden" aria-hidden="true">
+    <div class="feedback-container" role="dialog" aria-modal="true" aria-labelledby="feedbackDealTitle">
+      <!-- Header -->
+      <div class="feedback-header">
+        <div class="feedback-title-section">
+          <h2 id="feedbackDealTitle">Deal Feedback</h2>
+          <div id="feedbackSummary" class="feedback-summary"></div>
+        </div>
+        <div class="feedback-actions">
+          <button id="feedbackReplyBtn" class="btn-secondary">Reply</button>
+          <button id="feedbackUploadBtn" class="btn-primary">📎 Upload Stips</button>
+          <button id="feedbackSendUpdate" class="btn-secondary">Send Update</button>
+          <button id="feedbackMarkFunded" class="btn-primary">Mark as Funded</button>
+          <button id="feedbackClose" class="btn-close" aria-label="Close">×</button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="feedback-tabs">
+        <button id="feedbackTabOverview" class="feedback-tab active">Overview</button>
+        <button id="feedbackTabOffers" class="feedback-tab">Offers</button>
+        <button id="feedbackTabStips" class="feedback-tab">Stips</button>
+        <button id="feedbackTabDeclines" class="feedback-tab">Declines</button>
+        <button id="feedbackTabActivity" class="feedback-tab">Activity</button>
+        <button id="feedbackTabDocuments" class="feedback-tab">Documents</button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="feedback-body">
+        <!-- Overview Tab -->
+        <div id="feedbackContentOverview" class="feedback-content"></div>
+
+        <!-- Offers Tab -->
+        <div id="feedbackContentOffers" class="feedback-content hidden"></div>
+
+        <!-- Stips Tab -->
+        <div id="feedbackContentStips" class="feedback-content hidden"></div>
+
+        <!-- Declines Tab -->
+        <div id="feedbackContentDeclines" class="feedback-content hidden"></div>
+
+        <!-- Activity Tab -->
+        <div id="feedbackContentActivity" class="feedback-content hidden"></div>
+
+        <!-- Documents Tab -->
+        <div id="feedbackContentDocuments" class="feedback-content hidden"></div>
+      </div>
+
+      <!-- Hidden file input for stips upload -->
+      <input id="feedbackStipFile" type="file" multiple accept="application/pdf,image/*" class="visually-hidden" />
+    </div>
+  </div>
+
+  <!-- Main JavaScript Module -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

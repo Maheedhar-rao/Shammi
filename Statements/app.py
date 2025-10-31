@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 
 from pathlib import Path
-from flask import Flask, send_from_directory, Response, request, jsonify, redirect, session
+from flask import Flask, send_from_directory, Response, request, jsonify, redirect, session, Blueprint as blueprint
 from flask_cors import CORS
 from flask import request, make_response, session
 import os, requests
@@ -10,9 +9,9 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
 BASE_DIR = Path(__file__).resolve().parent
-PUBLIC_DIR = BASE_DIR / "public"   
+PUBLIC_DIR = BASE_DIR / "public"
+PUB_DIR = BASE_DIR / "pub"  # Refactored version   
 
-# Read Supabase credentials from environment
 SUPABASE_URL  = os.environ.get("SUPABASE_URL")
 SUPABASE_ANON = os.environ.get("SUPABASE_ANON")
 AUTH_BASE     = f"{SUPABASE_URL.rstrip('/')}/auth/v1" if SUPABASE_URL else None
@@ -26,16 +25,17 @@ CORS(appsupports_credentials=True,
      resources={r"/api/*": {"origins": ["http://127.0.0.1:5055", "http://localhost:5055",]}})
 
 app.secret_key = os.environ.get("APP_SECRET", "dev-secret")
-app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  
 
 
-from underwrite import bp as underwrite_bp          
-from auth_google import bp as auth_google_bp        
-from auth_user import bp as auth_user_bp            
-from decisions.decisions_api import bp as decisions_bp  
-from auth_user_proxy import bp as auth_user_bp   
+from underwrite import bp as underwrite_bp
+from auth_google import bp as auth_google_bp
+from auth_user import bp as auth_user_bp
+from decisions.decisions_api import bp as decisions_bp
+from auth_user_proxy import bp as auth_user_bp
 from api_wrap import bp as wrap_bp
 from probe_auth import bp as probe_bp
+from feedback_api import bp as feedback_bp
 from auth_guard import global_auth_before_request
 from flask_login import LoginManager
 
@@ -59,6 +59,15 @@ app.register_blueprint(probe_bp)
 app.before_request(global_auth_before_request)
 login_manager = LoginManager(app)
 
+print("\n" + "=" * 50)
+print("🔍 Checking /send route...")
+send_routes = [r for r in app.url_map.iter_rules() if 'send' in r.rule]
+if send_routes:
+    for r in send_routes:
+        print(f"✅ Found: {r.rule} → {r.endpoint}")
+else:
+    print("❌ No /send route found!")
+print("=" * 50 + "\n")
 
 @app.after_request
 def add_no_store_headers(resp):
@@ -81,6 +90,15 @@ ALLOW_PREFIXES = (
     "/api/wrap", 
 )
 
+bp = blueprint("underwrite", __name__)
+DEV_BYPASS = os.getenv("DEV_BYPASS_AUTH") == "1"
+OPEN_PATHS = {
+    "/api/underwrite/wrap-secure",
+    "/api/underwrite/v",                 
+    "/api/underwrite/pixel",             
+    "/api/underwrite/analytics",         
+}
+
 def _is_allowed(path: str) -> bool:
     return any(path.startswith(p) for p in ALLOW_PREFIXES)
 
@@ -89,11 +107,10 @@ def _sb_headers(token=None):
     return {"apikey": SUPABASE_ANON, "Authorization": f"Bearer {bearer}"}
 
 def _get_access_token_from_request(req):
-    # 1) Authorization: Bearer ...
     auth = req.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         return auth[7:].strip()
-    # 2) sb-access-token cookie (Supabase browser flow)
+    
     return req.cookies.get("sb-access-token")
 
 @app.before_request
@@ -105,29 +122,23 @@ def require_login():
     if path in ("/", "/underwrite.html"):
         return
 
-    # API protection: allow if session OR Supabase JWT OR explicit dev bypass.
     if path.startswith("/api/"):
-        # dev bypass (only if you really want it)
         dev_bypass = request.headers.get("X-User-Email") or request.args.get("dev_email")
 
         if session.get("user_email") or dev_bypass:
-            return  # allowed via legacy session or bypass
+            return 
 
-        # Try Supabase JWT (header or cookie)
         at = _get_access_token_from_request(request)
         if not at:
             return jsonify({"error": "not_authenticated"}), 401
 
-        # Validate token with Supabase
         r = requests.get(f"{AUTH_BASE}/user", headers=_sb_headers(at), timeout=10)
         if r.status_code >= 400:
             return jsonify({"error": "invalid_token"}), 401
 
-        # Optionally stash user on session/g for downstream use:
-        # session['user_email'] = r.json().get('email')  # if you want legacy UIs to see it
+    
         return
 
-    # Non-API pages: keep your legacy session gate
     if not session.get("user_email"):
         return redirect("/login")
 
@@ -193,6 +204,31 @@ def whoami():
 @login_manager.unauthorized_handler
 def _unauth():
     return jsonify({"error": "not_authenticated"}), 401
+
+
+@app.get("/trace")
+def serve_trace():
+    return app.send_static_file("trace.html")
+
+
+
+@bp.before_request
+def _dev_bypass_auth():
+    if not DEV_BYPASS:
+        return None
+    p = request.path
+
+    for open_prefix in OPEN_PATHS:
+        if p.startswith(open_prefix):
+            return None
+    return None
+
+
+from underwrite import view_secure_pdf   
+
+@app.get("/v/<secure_token>")
+def public_secure_view(secure_token):
+    return view_secure_pdf(secure_token)
 
 
 
