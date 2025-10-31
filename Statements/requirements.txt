@@ -4,7 +4,7 @@ gunicorn
 requests
 python-dotenv
 PyPDF2
-
+pikepdf
 # PDF tooling
 reportlab
 pillow
