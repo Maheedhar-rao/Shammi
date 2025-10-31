@@ -6,5 +6,5 @@ python-dotenv
 reportlab
 pillow
 supabase
-
+PyPDF2
 
