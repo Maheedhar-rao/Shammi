@@ -3,4 +3,8 @@ flask-cors
 gunicorn
 requests
 python-dotenv
+reportlab
+pillow
+supabase
+
 
