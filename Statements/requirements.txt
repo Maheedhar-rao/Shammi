@@ -7,4 +7,5 @@ reportlab
 pillow
 supabase
 PyPDF2
+pikepdf
 
