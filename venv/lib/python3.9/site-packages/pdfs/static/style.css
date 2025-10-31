@@ -1,0 +1,268 @@
+@import url('https://fonts.googleapis.com/css?family=Crimson+Text:400,400i,700,700i|Lato:300,900');
+
+div.pdfs {
+    font-family: 'Crimson Text', serif;
+    font-weight: 400;
+    margin: 2em auto;
+    max-width: 700px;
+}
+
+div.tagBar {
+    margin: 1em 4em;
+    padding: 1em 1.5em;
+    max-width: 700px;
+    border-top: 1px solid #bbb;
+    border-bottom: 1px solid #bbb;
+    text-align: center;
+}
+
+a {
+    text-decoration: none;
+    color: black;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+a.attachment {
+    font-style: italic;
+    color: #41af00;
+}
+
+a.pdf {
+    font-family: 'Lato', sans-serif;
+    font-weight: 900;
+    font-size: 0.8em;
+    color: white;
+    padding: 0.1em 0.5em;
+    text-decoration: none;
+    border-radius: 0.2em;
+    background-color: hsl(352, 51%, 37%);
+}
+
+a.pdf:hover {
+    background-color: hsl(352, 51%, 50%);
+}
+
+a.pdf::before {
+    content: "PDF";
+}
+
+a.bib {
+    font-family: 'Lato', sans-serif;
+    font-weight: 900;
+    font-size: 0.8em;
+    color: white;
+    padding: 0.1em 0.5em;
+    text-decoration: none;
+    border-radius: 0.2em;
+    background-color: hsl(240, 32%, 36%);
+}
+
+a.bib:hover {
+    background-color: hsl(240, 32%, 50%);
+}
+
+a.bib::before {
+    content: "BIB";
+}
+
+a.tags {
+    font-family: 'Lato', sans-serif;
+    font-weight: 900;
+    font-size: 0.8em;
+    color: white;
+    padding: 0.1em 0.5em;
+    margin: 0.2em 0.1em;
+    text-decoration: none;
+    border-radius: 0.2em;
+    background-color: hsl(119, 100%, 30%);
+}
+
+a.tags:hover {
+    background-color: hsl(119, 100%, 35%);
+}
+
+span.title {
+    color: hsl(164, 57%, 26%);
+}
+
+div.entry {
+    display: grid;
+    grid-template-rows: 1.5em auto auto auto;
+    grid-template-columns: 3em 6em 1fr 6em;
+    grid-gap: 0px;
+    margin-bottom: 2em;
+    grid-template-areas :
+        "key key  time lnks"
+        "b   ref  ref  ref"
+        "b   ltag tags tags"
+        "b   latt att  att";
+}
+
+div.key {
+    vertical-align: middle;
+    grid-area: key;
+    font-family: 'Lato', sans-serif;
+    font-weight: 300;
+}
+
+div.timestamp {
+    text-align: right;
+    padding: 0.4em;
+    grid-area: time;
+    font-family: 'Lato', sans-serif;
+    font-weight: 300;
+    font-size: 0.7em;
+    color: #666;
+}
+
+div.reference {
+    grid-area: ref;
+    padding-bottom: 0.2em;
+    text-align: justify;
+}
+
+div.attachments {
+    grid-area: att;
+}
+
+div.links {
+    text-align:right;
+    grid-area: lnks;
+}
+
+div.tags {
+    grid-area: tags;
+}
+
+div.tagLabel {
+    grid-area: ltag;
+    font-family: 'Lato', sans-serif;
+    font-weight: 300;
+    font-size: 0.8em;
+    padding-left: 1em;
+    padding-top: 0.2em;
+}
+
+div.tagLabel::before {
+    content: "Tags:";
+}
+
+div.attLabel {
+    grid-area: latt;
+    font-family: 'Lato', sans-serif;
+    font-weight: 300;
+    font-size: 0.8em;
+    padding-left: 1em;
+    padding-top: 0.2em;
+}
+
+div.attLabel::before {
+    content: "Attachments:";
+}
+
+span.match {
+    font-weight: 400;
+    color: hsl(314, 67%, 46%);
+}
+
+div.searchResults {
+    font-size:0.9em;
+    margin-left: 2em;
+    text-align: justify;
+    margin-bottom: 4em;
+    border-radius: 0.5em;
+    border-left: solid 1px #bbb;
+    border-right: solid 1px #bbb;
+}
+    
+
+div.fragment {
+    margin: 0.5em 1em 1em 1em;
+}
+
+span.fragmentPage {
+    font-family: 'Lato', sans-serif;
+    font-weight: 300;
+    color: #666;
+    font-size:0.8em;
+}
+
+span.fragmentPage::before {
+    content: "p.";
+}
+
+select.search, input.search {
+    color: #313131;
+    width: 12%;
+    padding: 0px 0px 0px 5px;
+    border: 1px solid hsla(352, 53%, 90%, 1);
+    background: hsla(0, 0%, 99%, 1);
+    font-family: Lato;
+    height: 30px;
+    line-height: 15px;
+    margin: 2px 6px 16px 0px;
+    outline-width:0;
+}
+
+select.search {
+    height: 32px;
+    flex: 0 0 auto;
+    /* width: 12%; */
+}
+
+input.search {
+    height: 30px;
+    flex: 1 0 8em;
+    /* width: 70%; */
+}
+
+input.search:focus, select.search:focus {
+    border: 1px solid hsla(352, 100%, 88%, 1);
+    background: white;
+    outline-width:0;
+}
+
+form {
+    display: flex;
+}
+
+input.button {
+    flex: 0 0 auto;
+    height: 32px;
+    background: #d24b5d;
+    border: 1px solid #86303b;
+    margin: 2px;
+    padding: 6px 25px 8px 25px;
+    color: #FFF;
+    border-radius: 3px;
+    text-shadow: 1px 1px 1px #670713;
+    cursor: pointer;
+    font-weight: 900;
+    font-family: Lato;
+}
+
+input.button:hover {
+    background: #ec2640;
+}
+
+div.head {
+    font-size: 3em;
+    text-align: center;
+}
+
+.head > a:hover {
+    text-decoration: none;
+}
+
+span.searchSep {
+    padding-left: 1em;
+    padding-right: 1em;
+    color: #999;
+}
+
+span.searchSep::before {
+    content: "…";
+}
