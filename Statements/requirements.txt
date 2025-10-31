@@ -10,6 +10,9 @@ reportlab
 pillow
 pdfplumber
 pdfminer.six
+pdf2image
+
+flask_login
 
 # Google APIs for auth + Gmail send
 google-auth
