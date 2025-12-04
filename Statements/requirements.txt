@@ -15,6 +15,7 @@ pdfminer.six
 pdf2image
 pytesseract
 python-dateutil
+rapidfuzz
 
 flask_login
 
