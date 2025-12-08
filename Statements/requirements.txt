@@ -16,7 +16,8 @@ pdf2image
 pytesseract
 python-dateutil
 rapidfuzz
-cv2
+opencv-python-headless
+
 
 flask_login
 
