@@ -76,7 +76,7 @@ CREDS_PATH: Optional[Path] = _find_creds()
 
 def _origin() -> str:
     #o = os.environ.get("APP_ORIGIN")
-    return (o or request.host_url.rstrip("/")).rstrip("/")
+    return (request.host_url.rstrip("/")).rstrip("/")
 
 
 def _redirect_uri() -> str:
