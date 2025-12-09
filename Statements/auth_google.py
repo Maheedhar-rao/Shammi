@@ -11,7 +11,7 @@ Routes:
   POST /api/auth/google/logout
 
 Env (dev):
-  export APP_ORIGIN="http://127.0.0.1:5055"
+  export APP_ORIGIN="http://127.0.0.1:5056"
   export GOOGLE_OAUTH_CLIENT_SECRETS="/absolute/path/to/creds.json"
   export OAUTHLIB_INSECURE_TRANSPORT=1
   export ALLOWED_EMAIL="team@pathwaycatalyst.com"
